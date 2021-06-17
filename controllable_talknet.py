@@ -668,112 +668,117 @@ def generate_audio(
         ]
 
     try:
-        durs, arpa, t = get_duration(wav_name, transcript)
-        if tnpath != talknet_path:
-            tnmodel = TalkNetSpectModel.restore_from(talknet_path)
-            tnmodel.eval()
+        with torch.no_grad():
+            durs, arpa, t = get_duration(wav_name, transcript)
+            if tnpath != talknet_path:
+                tnmodel = TalkNetSpectModel.restore_from(talknet_path)
+                tnmodel.eval()
 
-        tokens = tnmodel.parse(text=transcript.strip())
-        spect = tnmodel.force_spectrogram(
-            tokens=tokens,
-            durs=torch.from_numpy(durs).view(1, -1).to("cuda:0"),
-            f0=torch.FloatTensor(f0s).view(1, -1).to("cuda:0"),
-        )
-        np.save(
-            os.path.join(UPLOAD_DIRECTORY, "output", wav_name + ".npy"),
-            spect.detach().cpu().numpy(),
-        )
-
-        if hifipath != hifigan_path:
-            hifigan, h, denoiser = load_hifigan(hifigan_path, "config_v1")
-
-        y_g_hat = hifigan(spect.float())
-        audio = y_g_hat.squeeze()
-        audio = audio * MAX_WAV_VALUE
-        audio_denoised = denoiser(audio.view(1, -1), strength=35)[:, 0]
-        audio_np = audio_denoised.detach().cpu().numpy().reshape(-1).astype(np.int16)
-
-        # Pitch correction
-        if "pc" in pitch_options:
-
-            def get_f0(audio, sr):
-                time, frequency, confidence, activation = crepe.predict(
-                    audio, sr, viterbi=True
-                )
-                return torch.from_numpy(frequency.astype(np.float32))
-
-            input_pitch = get_f0(audio_np, 22050)
-            target_sr, target_audio = wavfile.read(wav_name)
-            target_pitch = get_f0(target_audio, target_sr)
-            factor = torch.mean(input_pitch) / torch.mean(target_pitch)
-            if "pf" in pitch_options:
-                factor = pitch_factor
-            target_pitch *= factor
-            if len(target_pitch) < len(input_pitch):
-                target_pitch = torch.nn.functional.pad(
-                    target_pitch,
-                    (0, list(input_pitch.shape)[0] - list(target_pitch.shape)[0]),
-                    "constant",
-                    0,
-                )
-            if len(target_pitch) > len(input_pitch):
-                target_pitch = target_pitch[0 : list(input_pitch.shape)[0]]
-
-            audio_np = psola.vocode(audio_np, 22050, target_pitch=target_pitch).astype(
-                np.float32
+            tokens = tnmodel.parse(text=transcript.strip())
+            spect = tnmodel.force_spectrogram(
+                tokens=tokens,
+                durs=torch.from_numpy(durs).view(1, -1).to("cuda:0"),
+                f0=torch.FloatTensor(f0s).view(1, -1).to("cuda:0"),
             )
-            normalize = (1.0 / np.max(np.abs(audio_np))) ** 0.9
-            audio_np = audio_np * normalize * MAX_WAV_VALUE
-            audio_np = audio_np.astype(np.int16)
-        else:
-            factor = pitch_factor
+            np.save(
+                os.path.join(UPLOAD_DIRECTORY, "output", wav_name + ".npy"),
+                spect.detach().cpu().numpy(),
+            )
 
-        # Resample to 32k
+            if hifipath != hifigan_path:
+                hifigan, h, denoiser = load_hifigan(hifigan_path, "config_v1")
 
-        wave = resampy.resample(
-            audio_np,
-            h.sampling_rate,
-            h2.sampling_rate,
-            filter="sinc_window",
-            window=scipy.signal.windows.hann,
-            num_zeros=8,
-        )
-        wave_out = wave.astype(np.int16)
+            y_g_hat = hifigan(spect.float())
+            audio = y_g_hat.squeeze()
+            audio = audio * MAX_WAV_VALUE
+            audio_denoised = denoiser(audio.view(1, -1), strength=35)[:, 0]
+            audio_np = (
+                audio_denoised.detach().cpu().numpy().reshape(-1).astype(np.int16)
+            )
 
-        # HiFi-GAN super-resolution
-        wave = wave / MAX_WAV_VALUE
-        wave = torch.FloatTensor(wave).to(torch.device("cuda"))
-        new_mel = mel_spectrogram(
-            wave.unsqueeze(0),
-            h2.n_fft,
-            h2.num_mels,
-            h2.sampling_rate,
-            h2.hop_size,
-            h2.win_size,
-            h2.fmin,
-            h2.fmax,
-        )
-        y_g_hat2 = hifigan_sr(new_mel)
-        audio2 = y_g_hat2.squeeze()
-        audio2 = audio2 * MAX_WAV_VALUE
-        audio2_denoised = denoiser(audio2.view(1, -1), strength=35)[:, 0]
+            # Pitch correction
+            if "pc" in pitch_options:
 
-        # High-pass filter, mixing and denormalizing
-        audio2_denoised = audio2_denoised.detach().cpu().numpy().reshape(-1)
-        b = scipy.signal.firwin(101, cutoff=10500, fs=h2.sampling_rate, pass_zero=False)
-        y = scipy.signal.lfilter(b, [1.0], audio2_denoised)
-        y *= 4.0  # superres strength
-        y_out = y.astype(np.int16)
-        y_padded = np.zeros(wave_out.shape)
-        y_padded[: y_out.shape[0]] = y_out
-        sr_mix = wave_out + y_padded
+                def get_f0(audio, sr):
+                    time, frequency, confidence, activation = crepe.predict(
+                        audio, sr, viterbi=True
+                    )
+                    return torch.from_numpy(frequency.astype(np.float32))
 
-        buffer = io.BytesIO()
-        wavfile.write(buffer, 32000, sr_mix.astype(np.int16))
-        b64 = base64.b64encode(buffer.getvalue())
-        sound = "data:audio/x-wav;base64," + b64.decode("ascii")
+                input_pitch = get_f0(audio_np, 22050)
+                target_sr, target_audio = wavfile.read(wav_name)
+                target_pitch = get_f0(target_audio, target_sr)
+                factor = torch.mean(input_pitch) / torch.mean(target_pitch)
+                if "pf" in pitch_options:
+                    factor = pitch_factor
+                target_pitch *= factor
+                if len(target_pitch) < len(input_pitch):
+                    target_pitch = torch.nn.functional.pad(
+                        target_pitch,
+                        (0, list(input_pitch.shape)[0] - list(target_pitch.shape)[0]),
+                        "constant",
+                        0,
+                    )
+                if len(target_pitch) > len(input_pitch):
+                    target_pitch = target_pitch[0 : list(input_pitch.shape)[0]]
 
-        return [sound, arpa, playback_style, factor]
+                audio_np = psola.vocode(
+                    audio_np, 22050, target_pitch=target_pitch
+                ).astype(np.float32)
+                normalize = (1.0 / np.max(np.abs(audio_np))) ** 0.9
+                audio_np = audio_np * normalize * MAX_WAV_VALUE
+                audio_np = audio_np.astype(np.int16)
+            else:
+                factor = pitch_factor
+
+            # Resample to 32k
+
+            wave = resampy.resample(
+                audio_np,
+                h.sampling_rate,
+                h2.sampling_rate,
+                filter="sinc_window",
+                window=scipy.signal.windows.hann,
+                num_zeros=8,
+            )
+            wave_out = wave.astype(np.int16)
+
+            # HiFi-GAN super-resolution
+            wave = wave / MAX_WAV_VALUE
+            wave = torch.FloatTensor(wave).to(torch.device("cuda"))
+            new_mel = mel_spectrogram(
+                wave.unsqueeze(0),
+                h2.n_fft,
+                h2.num_mels,
+                h2.sampling_rate,
+                h2.hop_size,
+                h2.win_size,
+                h2.fmin,
+                h2.fmax,
+            )
+            y_g_hat2 = hifigan_sr(new_mel)
+            audio2 = y_g_hat2.squeeze()
+            audio2 = audio2 * MAX_WAV_VALUE
+            audio2_denoised = denoiser(audio2.view(1, -1), strength=35)[:, 0]
+
+            # High-pass filter, mixing and denormalizing
+            audio2_denoised = audio2_denoised.detach().cpu().numpy().reshape(-1)
+            b = scipy.signal.firwin(
+                101, cutoff=10500, fs=h2.sampling_rate, pass_zero=False
+            )
+            y = scipy.signal.lfilter(b, [1.0], audio2_denoised)
+            y *= 4.0  # superres strength
+            y_out = y.astype(np.int16)
+            y_padded = np.zeros(wave_out.shape)
+            y_padded[: y_out.shape[0]] = y_out
+            sr_mix = wave_out + y_padded
+
+            buffer = io.BytesIO()
+            wavfile.write(buffer, 32000, sr_mix.astype(np.int16))
+            b64 = base64.b64encode(buffer.getvalue())
+            sound = "data:audio/x-wav;base64," + b64.decode("ascii")
+
+            return [sound, arpa, playback_style, factor]
     except Exception:
         return [
             None,
