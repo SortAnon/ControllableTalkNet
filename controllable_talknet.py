@@ -22,6 +22,7 @@ import gdown
 import zipfile
 import resampy
 import traceback
+import ffmpeg
 
 sys.path.append("hifi-gan")
 from env import AttrDict
@@ -328,12 +329,16 @@ def get_duration(wav_name, transcript):
         os.mkdir(os.path.join(UPLOAD_DIRECTORY, "output"))
     if "_" not in transcript:
         generate_json(
-            os.path.join(UPLOAD_DIRECTORY, wav_name) + "|" + transcript.strip(),
+            os.path.join(UPLOAD_DIRECTORY, "output", wav_name + "_conv.wav")
+            + "|"
+            + transcript.strip(),
             os.path.join(UPLOAD_DIRECTORY, "output", wav_name + ".json"),
         )
     else:
         generate_json(
-            os.path.join(UPLOAD_DIRECTORY, wav_name) + "|" + "dummy",
+            os.path.join(UPLOAD_DIRECTORY, "output", wav_name + "_conv.wav")
+            + "|"
+            + "dummy",
             os.path.join(UPLOAD_DIRECTORY, "output", wav_name + ".json"),
         )
 
@@ -500,9 +505,9 @@ playback_style = {
 )
 def update_filelist(n_clicks):
     filelist = []
+    supported_formats = [".wav", ".ogg", ".mp3", "flac", ".aac"]
     for x in os.listdir(UPLOAD_DIRECTORY):
-        if x[-4:].lower() == ".wav":
-            # print(x)
+        if x[-4:].lower() in supported_formats:
             filelist.append({"label": x, "value": x})
     return filelist
 
@@ -519,9 +524,21 @@ def update_filelist(n_clicks):
 )
 def select_file(dropdown_value):
     if dropdown_value is not None:
+        if not os.path.exists(os.path.join(UPLOAD_DIRECTORY, "output")):
+            os.mkdir(os.path.join(UPLOAD_DIRECTORY, "output"))
+        ffmpeg.input(os.path.join(UPLOAD_DIRECTORY, dropdown_value)).output(
+            os.path.join(UPLOAD_DIRECTORY, "output", dropdown_value + "_conv.wav"),
+            ar="22050",
+            ac="1",
+            acodec="pcm_s16le",
+            map_metadata="-1",
+            fflags="+bitexact",
+        ).overwrite_output().run(quiet=True)
         return [
             "Analyzed " + dropdown_value,
-            crepe_f0(os.path.join(UPLOAD_DIRECTORY, dropdown_value)),
+            crepe_f0(
+                os.path.join(UPLOAD_DIRECTORY, "output", dropdown_value + "_conv.wav")
+            ),
             dropdown_value,
         ]
     else:
@@ -706,7 +723,9 @@ def generate_audio(
                     return torch.from_numpy(frequency.astype(np.float32))
 
                 input_pitch = get_f0(audio_np, 22050)
-                target_sr, target_audio = wavfile.read(wav_name)
+                target_sr, target_audio = wavfile.read(
+                    os.path.join(UPLOAD_DIRECTORY, "output", wav_name + "_conv.wav")
+                )
                 target_pitch = get_f0(target_audio, target_sr)
                 factor = torch.mean(input_pitch) / torch.mean(target_pitch)
                 if "pf" in pitch_options:
