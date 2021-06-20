@@ -728,9 +728,19 @@ def generate_audio(
                 )
                 target_pitch = get_f0(target_audio, target_sr)
                 factor = torch.mean(input_pitch) / torch.mean(target_pitch)
+                if (
+                    max(factor, float(pitch_factor)) / min(factor, float(pitch_factor))
+                    < 2.0
+                    and float(pitch_factor) != 1.0
+                ):
+                    factor = float(pitch_factor)
                 if "pf" in pitch_options:
-                    factor = pitch_factor
-                target_pitch *= factor
+                    factor = float(pitch_factor)
+                    target_pitch *= factor
+                else:
+                    octaves = [0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0]
+                    nearest_octave = min(octaves, key=lambda x: abs(x - factor))
+                    target_pitch *= nearest_octave
                 if len(target_pitch) < len(input_pitch):
                     target_pitch = torch.nn.functional.pad(
                         target_pitch,
