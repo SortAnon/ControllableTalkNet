@@ -25,6 +25,7 @@ import zipfile
 import resampy
 import traceback
 import ffmpeg
+import time
 
 sys.path.append("hifi-gan")
 from env import AttrDict
@@ -429,11 +430,11 @@ def crepe_f0(wav_path, hop_length=256):
     # sr, audio = wavfile.read(io.BytesIO(wav_data))
     sr, audio = wavfile.read(wav_path)
     audio_x = np.arange(0, len(audio)) / 22050.0
-    time, frequency, confidence, activation = crepe.predict(audio, sr, viterbi=True)
+    f0time, frequency, confidence, activation = crepe.predict(audio, sr, viterbi=True)
 
     x = np.arange(0, len(audio), hop_length) / 22050.0
-    freq_interp = np.interp(x, time, frequency)
-    conf_interp = np.interp(x, time, confidence)
+    freq_interp = np.interp(x, f0time, frequency)
+    conf_interp = np.interp(x, f0time, confidence)
     audio_interp = np.interp(x, audio_x, np.absolute(audio)) / 32768.0
     weights = [0.5, 0.25, 0.25]
     audio_smooth = np.convolve(audio_interp, np.array(weights)[::-1], "same")
@@ -631,6 +632,7 @@ hifigan, h, denoiser, hifipath = None, None, None, None
         dash.dependencies.Output("generated-info", "children"),
         dash.dependencies.Output("audio-out", "style"),
         dash.dependencies.Output("pitch-factor", "value"),
+        dash.dependencies.Output("audio-out", "title"),
     ],
     [dash.dependencies.Input("gen-button", "n_clicks")],
     [
@@ -658,18 +660,14 @@ def generate_audio(
     if n_clicks is None:
         raise PreventUpdate
     if model is None:
-        return [
-            None,
-            "No character selected",
-            playback_hide,
-            pitch_factor,
-        ]
+        return [None, "No character selected", playback_hide, pitch_factor, None]
     if transcript is None or transcript.strip() == "":
         return [
             None,
             "No transcript entered",
             playback_hide,
             pitch_factor,
+            None,
         ]
     if wav_name is None and "dra" not in pitch_options:
         return [
@@ -677,6 +675,7 @@ def generate_audio(
             "No reference audio selected",
             playback_hide,
             pitch_factor,
+            None,
         ]
     load_error, talknet_path, hifigan_path = download_model(model, custom_model)
     if load_error is not None:
@@ -685,6 +684,7 @@ def generate_audio(
             load_error,
             playback_hide,
             pitch_factor,
+            None,
         ]
 
     try:
@@ -717,6 +717,7 @@ def generate_audio(
                         "Model doesn't support pitch prediction",
                         playback_hide,
                         pitch_factor,
+                        None,
                     ]
                 spect = tnmodel.generate_spectrogram(tokens=tokens)
             else:
@@ -742,9 +743,7 @@ def generate_audio(
             if "pc" in pitch_options and "dra" not in pitch_options:
 
                 def get_f0(audio, sr):
-                    time, frequency, confidence, activation = crepe.predict(
-                        audio, sr, viterbi=True
-                    )
+                    _, frequency, _, _ = crepe.predict(audio, sr, viterbi=True)
                     return torch.from_numpy(frequency.astype(np.float32))
 
                 input_pitch = get_f0(audio_np, 22050)
@@ -832,13 +831,15 @@ def generate_audio(
             b64 = base64.b64encode(buffer.getvalue())
             sound = "data:audio/x-wav;base64," + b64.decode("ascii")
 
-            return [sound, arpa, playback_style, factor]
+            output_name = "TalkNet_" + str(int(time.time()))
+            return [sound, arpa, playback_style, factor, output_name]
     except Exception:
         return [
             None,
             str(traceback.format_exc()),
             playback_hide,
             pitch_factor,
+            None,
         ]
 
 
