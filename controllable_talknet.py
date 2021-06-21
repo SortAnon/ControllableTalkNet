@@ -16,6 +16,8 @@ import io
 import nemo
 from nemo.collections.asr.models import EncDecCTCModel
 from nemo.collections.tts.models import TalkNetSpectModel
+from nemo.collections.tts.models import TalkNetPitchModel
+from nemo.collections.tts.models import TalkNetDursModel
 import json
 from tqdm import tqdm
 import gdown
@@ -111,6 +113,7 @@ app.layout = html.Div(
                                 "max-width": "80vw",
                                 "width": "30em",
                             },
+                            disabled=False,
                         ),
                         dcc.Store(id="pitch-clicks"),
                         html.Button(
@@ -119,6 +122,7 @@ app.layout = html.Div(
                             style={
                                 "margin-left": "10px",
                             },
+                            disabled=False,
                         ),
                     ],
                     style={
@@ -152,8 +156,9 @@ app.layout = html.Div(
                 dcc.Checklist(
                     id="pitch-options",
                     options=[
-                        {"label": "Pitch correction", "value": "pc"},
-                        {"label": "Override pitch factor", "value": "pf"},
+                        {"label": "Singing mode", "value": "pc"},
+                        {"label": "Set pitch multiplier", "value": "pf"},
+                        {"label": "Disable reference audio", "value": "dra"},
                     ],
                     value=["pc"],
                 ),
@@ -479,13 +484,17 @@ def update_model(value):
 
 
 @app.callback(
-    dash.dependencies.Output("pitch-factor", "disabled"),
+    [
+        dash.dependencies.Output("pitch-factor", "disabled"),
+        dash.dependencies.Output("reference-dropdown", "disabled"),
+        dash.dependencies.Output("pitch-button", "disabled"),
+    ],
     [
         dash.dependencies.Input("pitch-options", "value"),
     ],
 )
 def update_pitch_options(value):
-    return "pf" not in value
+    return ["pf" not in value, "dra" in value, "dra" in value]
 
 
 playback_style = {
@@ -494,6 +503,10 @@ playback_style = {
     "display": "block",
     "width": "600px",
     "max-width": "90vw",
+}
+
+playback_hide = {
+    "display": "none",
 }
 
 
@@ -565,9 +578,7 @@ def debug_pitch(n_clicks, pitch_clicks, current_f0s):
             pitch_clicks = 0
         return [
             None,
-            {
-                "display": "none",
-            },
+            playback_hide,
             pitch_clicks,
         ]
     pitch_clicks = n_clicks
@@ -610,7 +621,7 @@ def download_model(model, custom_model):
     )
 
 
-tnmodel, tnpath = None, None
+tnmodel, tnpath, tndurs, tnpitch = None, None, None, None
 hifigan, h, denoiser, hifipath = None, None, None, None
 
 
@@ -642,7 +653,7 @@ def generate_audio(
     wav_name,
     f0s,
 ):
-    global tnmodel, tnpath, hifigan, h, denoiser, hifipath
+    global tnmodel, tnpath, tndurs, tnpitch, hifigan, h, denoiser, hifipath
 
     if n_clicks is None:
         raise PreventUpdate
@@ -650,27 +661,21 @@ def generate_audio(
         return [
             None,
             "No character selected",
-            {
-                "display": "none",
-            },
+            playback_hide,
             pitch_factor,
         ]
     if transcript is None or transcript.strip() == "":
         return [
             None,
             "No transcript entered",
-            {
-                "display": "none",
-            },
+            playback_hide,
             pitch_factor,
         ]
-    if wav_name is None:
+    if wav_name is None and "dra" not in pitch_options:
         return [
             None,
-            "No reference audio uploaded",
-            {
-                "display": "none",
-            },
+            "No reference audio selected",
+            playback_hide,
             pitch_factor,
         ]
     load_error, talknet_path, hifigan_path = download_model(model, custom_model)
@@ -678,29 +683,49 @@ def generate_audio(
         return [
             None,
             load_error,
-            {
-                "display": "none",
-            },
+            playback_hide,
             pitch_factor,
         ]
 
     try:
         with torch.no_grad():
-            durs, arpa, t = get_duration(wav_name, transcript)
             if tnpath != talknet_path:
                 tnmodel = TalkNetSpectModel.restore_from(talknet_path)
+                durs_path = os.path.join(
+                    os.path.dirname(talknet_path), "TalkNetDurs.nemo"
+                )
+                pitch_path = os.path.join(
+                    os.path.dirname(talknet_path), "TalkNetPitch.nemo"
+                )
+                if os.path.exists(durs_path):
+                    tndurs = TalkNetDursModel.restore_from(durs_path)
+                    tnmodel.add_module("_durs_model", tndurs)
+                    tnpitch = TalkNetPitchModel.restore_from(pitch_path)
+                    tnmodel.add_module("_pitch_model", tnpitch)
+                else:
+                    tndurs = None
+                    tnpitch = None
                 tnmodel.eval()
 
             tokens = tnmodel.parse(text=transcript.strip())
-            spect = tnmodel.force_spectrogram(
-                tokens=tokens,
-                durs=torch.from_numpy(durs).view(1, -1).to("cuda:0"),
-                f0=torch.FloatTensor(f0s).view(1, -1).to("cuda:0"),
-            )
-            np.save(
-                os.path.join(UPLOAD_DIRECTORY, "output", wav_name + ".npy"),
-                spect.detach().cpu().numpy(),
-            )
+            arpa = ""
+
+            if "dra" in pitch_options:
+                if tndurs is None or tnpitch is None:
+                    return [
+                        None,
+                        "Model doesn't support pitch prediction",
+                        playback_hide,
+                        pitch_factor,
+                    ]
+                spect = tnmodel.generate_spectrogram(tokens=tokens)
+            else:
+                durs, arpa, t = get_duration(wav_name, transcript)
+                spect = tnmodel.force_spectrogram(
+                    tokens=tokens,
+                    durs=torch.from_numpy(durs).view(1, -1).to("cuda:0"),
+                    f0=torch.FloatTensor(f0s).view(1, -1).to("cuda:0"),
+                )
 
             if hifipath != hifigan_path:
                 hifigan, h, denoiser = load_hifigan(hifigan_path, "config_v1")
@@ -714,7 +739,7 @@ def generate_audio(
             )
 
             # Pitch correction
-            if "pc" in pitch_options:
+            if "pc" in pitch_options and "dra" not in pitch_options:
 
                 def get_f0(audio, sr):
                     time, frequency, confidence, activation = crepe.predict(
@@ -812,9 +837,7 @@ def generate_audio(
         return [
             None,
             str(traceback.format_exc()),
-            {
-                "display": "none",
-            },
+            playback_hide,
             pitch_factor,
         ]
 
