@@ -35,6 +35,7 @@ from denoiser import Denoiser
 
 app = JupyterDash(__name__)
 UPLOAD_DIRECTORY = "/content"
+torch.set_grad_enabled(False)
 
 app.layout = html.Div(
     children=[
