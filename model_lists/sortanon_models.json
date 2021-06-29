@@ -1,0 +1,100 @@
+[
+    {"source": "MLP",
+    "characters": [
+        {
+            "name": "Applejack",
+            "drive_id": "1kpEjZ3YqMN3chKSXODOqayEm581rxj4r",
+            "is_singing": false
+        },
+        {
+            "name": "Celestia",
+            "drive_id": "1whXXcnXu9XPcI60xIkTEofpaDYDOw5yB",
+            "is_singing": false
+        },
+        {
+            "name": "Chrysalis",
+            "drive_id": "1bb5jKAcQcEQbx1feVwT1UmAEgocINh-E",
+            "is_singing": false
+        },
+        {
+            "name": "Discord",
+            "drive_id": "1Cg9Oc_K9UDe5WgVDAcaCSbbBoo-Npj1E",
+            "is_singing": false
+        },
+        {
+            "name": "Fluttershy",
+            "drive_id": "1KgVnjrnxZTXgjnI56ilkq5G4UJCbbwZZ",
+            "is_singing": false
+        },
+        {
+            "name": "Luna",
+            "drive_id": "1_ztAbe5YArCMwyyQ_G9lUiz74ym5xJKC",
+            "is_singing": false
+        },
+        {
+            "name": "Maud Pie",
+            "drive_id": "132G6oD0HHPPn4t1H6IkYv18_F0UVLWgi",
+            "is_singing": false
+        },
+        {
+            "name": "Pinkie Pie",
+            "drive_id": "1CdYZ2r52mtgJsFs88U0ZViMSnzpQ_HRp",
+            "is_singing": false
+        },
+        {
+            "name": "Rainbow Dash",
+            "drive_id": "1k3EMXxLC0fLvfxzGbeP6B6plgu9hqCSx",
+            "is_singing": false
+        },
+        {
+            "name": "Rarity",
+            "drive_id": "1QWBvQSso4guc1LRUD40WRJ8DY2CfqHGK",
+            "is_singing": false
+        },
+        {
+            "name": "Spike",
+            "drive_id": "1TKFdmFLttjjzByj2fZW8J70ZHjR-RTwc",
+            "is_singing": false
+        },
+        {
+            "name": "Starlight Glimmer",
+            "drive_id": "1M1AMBq_xjwGTNzRUCXtSLIDJHbcSs3zR",
+            "is_singing": false
+        },
+        {
+            "name": "Sunset Shimmer",
+            "drive_id": "1x1aJt06lBvzUWRlxJ9CEKcFHxQxZPpST",
+            "is_singing": false
+        },
+        {
+            "name": "Trixie",
+            "drive_id": "1a3CYt0-oTTSFjxtZvAVMpClTmQteYua5",
+            "is_singing": false
+        },
+        {
+            "name": "Twilight Sparkle",
+            "drive_id": "1QnOliOAmerMUNuo2wXoH-YoainoSjZen",
+            "is_singing": false
+        },
+        {
+            "name": "Twilight (whispering)",
+            "drive_id": "14_TUQVirITdyBh9etfNV8KFFhi_PUs30",
+            "is_singing": false
+        },
+        {
+            "name": "Zecora",
+            "drive_id": "1gL0hqqB7952Q1S185moQd_DRCFfIa3_g",
+            "is_singing": false
+        },
+        {
+            "name": "Pinkie (singing)",
+            "drive_id": "19cdMqNJJUFFkurUgYG8ISqr7VLc_6_Co",
+            "is_singing": true
+        },
+        {
+            "name": "Twilight (singing)",
+            "drive_id": "1DEVEDfYegu1ffPtuGBX6cBUHPfzElY8C",
+            "is_singing": true
+        }
+    ]}
+]
