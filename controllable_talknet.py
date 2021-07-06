@@ -18,6 +18,7 @@ from nemo.collections.asr.models import EncDecCTCModel
 from nemo.collections.tts.models import TalkNetSpectModel
 from nemo.collections.tts.models import TalkNetPitchModel
 from nemo.collections.tts.models import TalkNetDursModel
+from talknet_singer import TalkNetSingerModel
 import json
 from tqdm import tqdm
 import gdown
@@ -156,8 +157,8 @@ app.layout = html.Div(
                 dcc.Checklist(
                     id="pitch-options",
                     options=[
-                        {"label": "Singing mode", "value": "pc"},
-                        {"label": "Set pitch multiplier", "value": "pf"},
+                        # {"label": "Singing mode", "value": "pc"},
+                        # {"label": "Set pitch multiplier", "value": "pf"},
                         {"label": "Disable reference audio", "value": "dra"},
                     ],
                     value=[],
@@ -166,11 +167,14 @@ app.layout = html.Div(
                     id="pitch-factor",
                     type="number",
                     value="1.0",
-                    style={"width": "7em", "margin-left": "10px"},
+                    # style={"width": "7em", "margin-left": "10px"},
                     min=0.1,
                     max=10.0,
                     step=0.01,
                     disabled=True,
+                    style={
+                        "display": "none",
+                    },
                 ),
             ],
             style={
@@ -595,12 +599,12 @@ def update_model(model, options):
         style = {"margin-bottom": "0.7em", "display": "block"}
     else:
         style = {"display": "none"}
-    new_options = options
-    if model is not None:
+    # new_options = options
+    """if model is not None:
         if "singing" in model.split("|")[1] and "pc" not in new_options:
             new_options.append("pc")
         elif "singing" not in model.split("|")[1] and "pc" in new_options:
-            new_options.remove("pc")
+            new_options.remove("pc")"""
     return [style, options]
 
 
@@ -819,7 +823,13 @@ def generate_audio(
     try:
         with torch.no_grad():
             if tnpath != talknet_path:
-                tnmodel = TalkNetSpectModel.restore_from(talknet_path)
+                singer_path = os.path.join(
+                    os.path.dirname(talknet_path), "TalkNetSinger.nemo"
+                )
+                if os.path.exists(singer_path):
+                    tnmodel = TalkNetSingerModel.restore_from(singer_path)
+                else:
+                    tnmodel = TalkNetSpectModel.restore_from(talknet_path)
                 durs_path = os.path.join(
                     os.path.dirname(talknet_path), "TalkNetDurs.nemo"
                 )

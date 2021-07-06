@@ -77,7 +77,7 @@
             "is_singing": false
         },
         {
-            "name": "Twilight (whispering)",
+            "name": "Twilight Sparkle (whispering)",
             "drive_id": "14_TUQVirITdyBh9etfNV8KFFhi_PUs30",
             "is_singing": false
         },
@@ -87,13 +87,33 @@
             "is_singing": false
         },
         {
-            "name": "Pinkie (singing)",
-            "drive_id": "19cdMqNJJUFFkurUgYG8ISqr7VLc_6_Co",
+            "name": "Twilight Sparkle (singing)",
+            "drive_id": "10CENYWV5ugTXZbnsldN6OKR7wkDEe7V7",
             "is_singing": true
         },
         {
-            "name": "Twilight (singing)",
-            "drive_id": "1DEVEDfYegu1ffPtuGBX6cBUHPfzElY8C",
+            "name": "Pinkie Pie (singing)",
+            "drive_id": "1lo-8wI8iB3GArrzIDlaNTA1If8WX0OEf",
+            "is_singing": true
+        },
+        {
+            "name": "Applejack (singing)",
+            "drive_id": "1kegd0J2G4nogaX4IOB2O_vd8msaqMx8M",
+            "is_singing": true
+        },
+        {
+            "name": "Fluttershy (singing)",
+            "drive_id": "1BBdTHis91MwnHTt7tD_xtZ-nQ9SgvqD6",
+            "is_singing": true
+        },
+        {
+            "name": "Rarity (singing)",
+            "drive_id": "1lxAcYSyFbxReom3OsH4VZpPGxE5U_AFq",
+            "is_singing": true
+        },
+        {
+            "name": "Rainbow Dash (singing)",
+            "drive_id": "1q4RgCEVJCSaR_1Dh0rxs6JVRJt30hQRK",
             "is_singing": true
         }
     ]}
