@@ -93,6 +93,7 @@ app.layout = html.Div(
             htmlFor="reference-dropdown",
         ),
         dcc.Store(id="current-f0s"),
+        dcc.Store(id="current-f0s-nosilence"),
         dcc.Store(id="current-filename"),
         dcc.Loading(
             id="audio-loading",
@@ -157,23 +158,30 @@ app.layout = html.Div(
                 dcc.Checklist(
                     id="pitch-options",
                     options=[
-                        # {"label": "Singing mode", "value": "pc"},
-                        # {"label": "Set pitch multiplier", "value": "pf"},
+                        {"label": "Change input pitch", "value": "pf"},
+                        {"label": "Auto-tune output", "value": "pc"},
                         {"label": "Disable reference audio", "value": "dra"},
                     ],
                     value=[],
                 ),
-                dcc.Input(
-                    id="pitch-factor",
-                    type="number",
-                    value="1.0",
-                    # style={"width": "7em", "margin-left": "10px"},
-                    min=0.1,
-                    max=10.0,
-                    step=0.01,
-                    disabled=True,
+                html.Div(
+                    [
+                        html.Label("Semitones", htmlFor="pitch-factor"),
+                        dcc.Input(
+                            id="pitch-factor",
+                            type="number",
+                            value="0",
+                            style={"width": "7em"},
+                            min=-11,
+                            max=11,
+                            step=1,
+                            disabled=True,
+                        ),
+                    ],
                     style={
-                        "display": "none",
+                        "flex-direction": "column",
+                        "margin-left": "10px",
+                        "margin-bottom": "0.7em",
                     },
                 ),
             ],
@@ -564,7 +572,10 @@ def crepe_f0(wav_path, hop_length=256):
     # Hack to make f0 and mel lengths equal
     if len(audio) % hop_length == 0:
         freq_interp = np.pad(freq_interp, pad_width=[0, 1])
-    return torch.from_numpy(freq_interp.astype(np.float32))
+    return (
+        torch.from_numpy(freq_interp.astype(np.float32)),
+        torch.from_numpy(frequency.astype(np.float32)),
+    )
 
 
 def f0_to_audio(f0s):
@@ -587,25 +598,15 @@ def f0_to_audio(f0s):
 
 
 @app.callback(
-    [
-        dash.dependencies.Output("custom-model", "style"),
-        dash.dependencies.Output("pitch-options", "value"),
-    ],
+    dash.dependencies.Output("custom-model", "style"),
     dash.dependencies.Input("model-dropdown", "value"),
-    dash.dependencies.State("pitch-options", "value"),
 )
-def update_model(model, options):
+def update_model(model):
     if model is not None and model.split("|")[0] == "Custom":
         style = {"margin-bottom": "0.7em", "display": "block"}
     else:
         style = {"display": "none"}
-    # new_options = options
-    """if model is not None:
-        if "singing" in model.split("|")[1] and "pc" not in new_options:
-            new_options.append("pc")
-        elif "singing" not in model.split("|")[1] and "pc" in new_options:
-            new_options.remove("pc")"""
-    return [style, options]
+    return style
 
 
 @app.callback(
@@ -654,6 +655,7 @@ def update_filelist(n_clicks):
     [
         dash.dependencies.Output("audio-loading-output", "children"),
         dash.dependencies.Output("current-f0s", "data"),
+        dash.dependencies.Output("current-f0s-nosilence", "data"),
         dash.dependencies.Output("current-filename", "data"),
     ],
     [
@@ -672,11 +674,13 @@ def select_file(dropdown_value):
             map_metadata="-1",
             fflags="+bitexact",
         ).overwrite_output().run(quiet=True)
+        fo_with_silence, f0_wo_silence = crepe_f0(
+            os.path.join(UPLOAD_DIRECTORY, "output", dropdown_value + "_conv.wav")
+        )
         return [
             "Analyzed " + dropdown_value,
-            crepe_f0(
-                os.path.join(UPLOAD_DIRECTORY, "output", dropdown_value + "_conv.wav")
-            ),
+            fo_with_silence,
+            f0_wo_silence,
             dropdown_value,
         ]
     else:
@@ -762,7 +766,6 @@ hifigan, h, denoiser, hifipath = None, None, None, None
         dash.dependencies.Output("audio-out", "src"),
         dash.dependencies.Output("generated-info", "children"),
         dash.dependencies.Output("audio-out", "style"),
-        dash.dependencies.Output("pitch-factor", "value"),
         dash.dependencies.Output("audio-out", "title"),
     ],
     [dash.dependencies.Input("gen-button", "n_clicks")],
@@ -774,6 +777,7 @@ hifigan, h, denoiser, hifipath = None, None, None, None
         dash.dependencies.State("pitch-factor", "value"),
         dash.dependencies.State("current-filename", "data"),
         dash.dependencies.State("current-f0s", "data"),
+        dash.dependencies.State("current-f0s-nosilence", "data"),
     ],
 )
 def generate_audio(
@@ -785,19 +789,19 @@ def generate_audio(
     pitch_factor,
     wav_name,
     f0s,
+    f0s_wo_silence,
 ):
     global tnmodel, tnpath, tndurs, tnpitch, hifigan, h, denoiser, hifipath
 
     if n_clicks is None:
         raise PreventUpdate
     if model is None:
-        return [None, "No character selected", playback_hide, pitch_factor, None]
+        return [None, "No character selected", playback_hide, None]
     if transcript is None or transcript.strip() == "":
         return [
             None,
             "No transcript entered",
             playback_hide,
-            pitch_factor,
             None,
         ]
     if wav_name is None and "dra" not in pitch_options:
@@ -805,7 +809,6 @@ def generate_audio(
             None,
             "No reference audio selected",
             playback_hide,
-            pitch_factor,
             None,
         ]
     load_error, talknet_path, hifigan_path = download_model(
@@ -816,7 +819,6 @@ def generate_audio(
             None,
             load_error,
             playback_hide,
-            pitch_factor,
             None,
         ]
 
@@ -855,12 +857,18 @@ def generate_audio(
                         None,
                         "Model doesn't support pitch prediction",
                         playback_hide,
-                        pitch_factor,
                         None,
                     ]
                 spect = tnmodel.generate_spectrogram(tokens=tokens)
             else:
                 durs, arpa, t = get_duration(wav_name, transcript)
+
+                # Change pitch
+                if "pf" in pitch_options:
+                    f0_factor = np.power(np.e, (0.0577623 * float(pitch_factor)))
+                    f0s = [x * f0_factor for x in f0s]
+                    f0s_wo_silence = [x * f0_factor for x in f0s_wo_silence]
+
                 spect = tnmodel.force_spectrogram(
                     tokens=tokens,
                     durs=torch.from_numpy(durs).view(1, -1).to("cuda:0"),
@@ -878,41 +886,25 @@ def generate_audio(
                 audio_denoised.detach().cpu().numpy().reshape(-1).astype(np.int16)
             )
 
-            # Pitch correction
+            # Auto-tuning
             if "pc" in pitch_options and "dra" not in pitch_options:
+                _, output_freq, _, _ = crepe.predict(audio_np, 22050, viterbi=True)
+                output_pitch = torch.from_numpy(output_freq.astype(np.float32))
+                target_pitch = torch.FloatTensor(f0s_wo_silence)
+                factor = torch.mean(output_pitch) / torch.mean(target_pitch)
 
-                def get_f0(audio, sr):
-                    _, frequency, _, _ = crepe.predict(audio, sr, viterbi=True)
-                    return torch.from_numpy(frequency.astype(np.float32))
-
-                input_pitch = get_f0(audio_np, 22050)
-                target_sr, target_audio = wavfile.read(
-                    os.path.join(UPLOAD_DIRECTORY, "output", wav_name + "_conv.wav")
-                )
-                target_pitch = get_f0(target_audio, target_sr)
-                factor = torch.mean(input_pitch) / torch.mean(target_pitch)
-                if (
-                    max(factor, float(pitch_factor)) / min(factor, float(pitch_factor))
-                    < 2.0
-                    and float(pitch_factor) != 1.0
-                ):
-                    factor = float(pitch_factor)
-                if "pf" in pitch_options:
-                    factor = float(pitch_factor)
-                    target_pitch *= factor
-                else:
-                    octaves = [0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0]
-                    nearest_octave = min(octaves, key=lambda x: abs(x - factor))
-                    target_pitch *= nearest_octave
-                if len(target_pitch) < len(input_pitch):
+                octaves = [0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0]
+                nearest_octave = min(octaves, key=lambda x: abs(x - factor))
+                target_pitch *= nearest_octave
+                if len(target_pitch) < len(output_pitch):
                     target_pitch = torch.nn.functional.pad(
                         target_pitch,
-                        (0, list(input_pitch.shape)[0] - list(target_pitch.shape)[0]),
+                        (0, list(output_pitch.shape)[0] - list(target_pitch.shape)[0]),
                         "constant",
                         0,
                     )
-                if len(target_pitch) > len(input_pitch):
-                    target_pitch = target_pitch[0 : list(input_pitch.shape)[0]]
+                if len(target_pitch) > len(output_pitch):
+                    target_pitch = target_pitch[0 : list(output_pitch.shape)[0]]
 
                 audio_np = psola.vocode(
                     audio_np, 22050, target_pitch=target_pitch
@@ -920,11 +912,8 @@ def generate_audio(
                 normalize = (1.0 / np.max(np.abs(audio_np))) ** 0.9
                 audio_np = audio_np * normalize * MAX_WAV_VALUE
                 audio_np = audio_np.astype(np.int16)
-            else:
-                factor = pitch_factor
 
             # Resample to 32k
-
             wave = resampy.resample(
                 audio_np,
                 h.sampling_rate,
@@ -971,13 +960,12 @@ def generate_audio(
             sound = "data:audio/x-wav;base64," + b64.decode("ascii")
 
             output_name = "TalkNet_" + str(int(time.time()))
-            return [sound, arpa, playback_style, factor, output_name]
+            return [sound, arpa, playback_style, output_name]
     except Exception:
         return [
             None,
             str(traceback.format_exc()),
             playback_hide,
-            pitch_factor,
             None,
         ]
 
