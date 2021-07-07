@@ -645,7 +645,7 @@ playback_hide = {
 def update_filelist(n_clicks):
     filelist = []
     supported_formats = [".wav", ".ogg", ".mp3", "flac", ".aac"]
-    for x in os.listdir(UPLOAD_DIRECTORY):
+    for x in sorted(os.listdir(UPLOAD_DIRECTORY)):
         if x[-4:].lower() in supported_formats:
             filelist.append({"label": x, "value": x})
     return filelist
