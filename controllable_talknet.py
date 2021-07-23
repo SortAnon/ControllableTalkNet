@@ -722,7 +722,7 @@ def download_model(model, custom_model):
             drive_id = custom_model
         else:
             drive_id = model
-        if drive_id == "":
+        if drive_id == "" or drive_id is None:
             return ("Missing Drive ID", None, None)
         if not os.path.exists(os.path.join(UPLOAD_DIRECTORY, "models")):
             os.mkdir(os.path.join(UPLOAD_DIRECTORY, "models"))
