@@ -715,46 +715,53 @@ def debug_pitch(n_clicks, pitch_clicks, current_f0s):
 
 
 def download_model(model, custom_model):
-    global hifigan_sr, h2, denoiser_sr
-    d = "https://drive.google.com/uc?id="
-    if model == "Custom":
-        drive_id = custom_model
-    else:
-        drive_id = model
-    if not os.path.exists(os.path.join(UPLOAD_DIRECTORY, "models")):
-        os.mkdir(os.path.join(UPLOAD_DIRECTORY, "models"))
-    if not os.path.exists(os.path.join(UPLOAD_DIRECTORY, "models", drive_id)):
-        os.mkdir(os.path.join(UPLOAD_DIRECTORY, "models", drive_id))
-        zip_path = os.path.join(UPLOAD_DIRECTORY, "models", drive_id, "model.zip")
-        gdown.download(
-            d + drive_id,
-            zip_path,
-            quiet=False,
-        )
-        if not os.path.exists(zip_path):
-            os.rmdir(os.path.join(UPLOAD_DIRECTORY, "models", drive_id))
-            return ("Model download failed", None, None)
-        if os.stat(zip_path).st_size < 16:
+    try:
+        global hifigan_sr, h2, denoiser_sr
+        d = "https://drive.google.com/uc?id="
+        if model == "Custom":
+            drive_id = custom_model
+        else:
+            drive_id = model
+        if drive_id == "":
+            return ("Missing Drive ID", None, None)
+        if not os.path.exists(os.path.join(UPLOAD_DIRECTORY, "models")):
+            os.mkdir(os.path.join(UPLOAD_DIRECTORY, "models"))
+        if not os.path.exists(os.path.join(UPLOAD_DIRECTORY, "models", drive_id)):
+            os.mkdir(os.path.join(UPLOAD_DIRECTORY, "models", drive_id))
+            zip_path = os.path.join(UPLOAD_DIRECTORY, "models", drive_id, "model.zip")
+            gdown.download(
+                d + drive_id,
+                zip_path,
+                quiet=False,
+            )
+            if not os.path.exists(zip_path):
+                os.rmdir(os.path.join(UPLOAD_DIRECTORY, "models", drive_id))
+                return ("Model download failed", None, None)
+            if os.stat(zip_path).st_size < 16:
+                os.remove(zip_path)
+                os.rmdir(os.path.join(UPLOAD_DIRECTORY, "models", drive_id))
+                return ("Model zip is empty", None, None)
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                zip_ref.extractall(os.path.join(UPLOAD_DIRECTORY, "models", drive_id))
             os.remove(zip_path)
-            os.rmdir(os.path.join(UPLOAD_DIRECTORY, "models", drive_id))
-            return ("Model zip is empty", None, None)
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(os.path.join(UPLOAD_DIRECTORY, "models", drive_id))
-        os.remove(zip_path)
 
-    # Download super-resolution HiFi-GAN
-    sr_path = "hifi-gan/hifisr"
-    if not os.path.exists(sr_path):
-        gdown.download(d + "14fOprFAIlCQkVRxsfInhEPG0n-xN4QOa", sr_path, quiet=False)
-    if not os.path.exists(sr_path):
-        raise Exception("HiFI-GAN model failed to download!")
-    hifigan_sr, h2, denoiser_sr = load_hifigan(sr_path, "config_32k")
+        # Download super-resolution HiFi-GAN
+        sr_path = "hifi-gan/hifisr"
+        if not os.path.exists(sr_path):
+            gdown.download(
+                d + "14fOprFAIlCQkVRxsfInhEPG0n-xN4QOa", sr_path, quiet=False
+            )
+        if not os.path.exists(sr_path):
+            raise Exception("HiFI-GAN model failed to download!")
+        hifigan_sr, h2, denoiser_sr = load_hifigan(sr_path, "config_32k")
 
-    return (
-        None,
-        os.path.join(UPLOAD_DIRECTORY, "models", drive_id, "TalkNetSpect.nemo"),
-        os.path.join(UPLOAD_DIRECTORY, "models", drive_id, "hifiganmodel"),
-    )
+        return (
+            None,
+            os.path.join(UPLOAD_DIRECTORY, "models", drive_id, "TalkNetSpect.nemo"),
+            os.path.join(UPLOAD_DIRECTORY, "models", drive_id, "hifiganmodel"),
+        )
+    except Exception as e:
+        return (str(e), None, None)
 
 
 tnmodel, tnpath, tndurs, tnpitch = None, None, None, None
