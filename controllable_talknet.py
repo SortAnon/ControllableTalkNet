@@ -879,11 +879,11 @@ def generate_audio(
 
                 spect = tnmodel.force_spectrogram(
                     tokens=tokens,
-                    durs=torch.from_numpy(durs).view(1, -1).to("cuda:0"),
-                    f0=torch.FloatTensor(f0s)
+                    durs=torch.from_numpy(durs)
                     .view(1, -1)
                     .type(torch.LongTensor)
                     .to("cuda:0"),
+                    f0=torch.FloatTensor(f0s).view(1, -1).to("cuda:0"),
                 )
 
             if hifipath != hifigan_path:
