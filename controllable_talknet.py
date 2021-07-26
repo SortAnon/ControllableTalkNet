@@ -8,6 +8,7 @@ import dash_html_components as html
 from dash.exceptions import PreventUpdate
 import torch
 import numpy as np
+import tensorflow as tf
 import crepe
 import scipy
 from scipy.io import wavfile
@@ -36,12 +37,16 @@ from models import Generator
 from denoiser import Denoiser
 
 app = JupyterDash(__name__)
+DEVICE = "cuda:0"
+CPU_PITCH = False
 RUN_PATH = os.path.dirname(os.path.realpath(__file__))
 if RUN_PATH == "/content":
     UI_MODE = "colab"
 else:
     UI_MODE = "offline"
 torch.set_grad_enabled(False)
+if CPU_PITCH:
+    tf.config.set_visible_devices([], "GPU")
 
 app.title = "Controllable TalkNet"
 app.layout = html.Div(
@@ -377,8 +382,8 @@ def load_hifigan(model_name, conf_name):
         json_config = json.loads(f.read())
     h = AttrDict(json_config)
     torch.manual_seed(h.seed)
-    hifigan = Generator(h).to(torch.device("cuda"))
-    state_dict_g = torch.load(model_name, map_location=torch.device("cuda"))
+    hifigan = Generator(h).to(torch.device(DEVICE))
+    state_dict_g = torch.load(model_name, map_location=torch.device(DEVICE))
     hifigan.load_state_dict(state_dict_g["generator"])
     hifigan.eval()
     hifigan.remove_weight_norm()
@@ -882,8 +887,8 @@ def generate_audio(
                     durs=torch.from_numpy(durs)
                     .view(1, -1)
                     .type(torch.LongTensor)
-                    .to("cuda:0"),
-                    f0=torch.FloatTensor(f0s).view(1, -1).to("cuda:0"),
+                    .to(DEVICE),
+                    f0=torch.FloatTensor(f0s).view(1, -1).to(DEVICE),
                 )
 
             if hifipath != hifigan_path:
@@ -937,7 +942,7 @@ def generate_audio(
 
             # HiFi-GAN super-resolution
             wave = wave / MAX_WAV_VALUE
-            wave = torch.FloatTensor(wave).to(torch.device("cuda"))
+            wave = torch.FloatTensor(wave).to(torch.device(DEVICE))
             new_mel = mel_spectrogram(
                 wave.unsqueeze(0),
                 h2.n_fft,
