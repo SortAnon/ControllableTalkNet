@@ -115,6 +115,26 @@
             "name": "Rainbow Dash (singing)",
             "drive_id": "1q4RgCEVJCSaR_1Dh0rxs6JVRJt30hQRK",
             "is_singing": true
+        },
+        {
+            "name": "Apple Bloom",
+            "drive_id": "1Wm-7gqws0B3j8mtSQa77Tdk3RZwHEwT5",
+            "is_singing": false
+        },
+        {
+            "name": "Scootaloo",
+            "drive_id": "1YkV1VtP1w5XOx3jYYarrCKSzXCB_FLCy",
+            "is_singing": false
+        },
+        {
+            "name": "Sweetie Belle",
+            "drive_id": "1jLX0Py6j8uY93Fjf2l0HOZQYXiShfWUO",
+            "is_singing": false
+        },
+        {
+            "name": "Cozy Glow",
+            "drive_id": "1cUQQ_4KXTXbmH3MqwwyZu77SpMr20HAL",
+            "is_singing": false
         }
     ]}
 ]
