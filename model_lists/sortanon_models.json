@@ -135,6 +135,31 @@
             "name": "Cozy Glow",
             "drive_id": "1cUQQ_4KXTXbmH3MqwwyZu77SpMr20HAL",
             "is_singing": false
+        },
+        {
+            "name": "Big McIntosh",
+            "drive_id": "1UzL5vo_ykmRdbi-5JOlsQzNKkoV4tJBP",
+            "is_singing": false
+        },
+        {
+            "name": "Cadance",
+            "drive_id": "1w98tMJPfGhWvl797gImMfErPXDz_hA-6",
+            "is_singing": false
+        },
+        {
+            "name": "Granny Smith",
+            "drive_id": "1FJuxLB6MhcHLtmEnOIxhN-yxJ85kmacu",
+            "is_singing": false
+        },
+        {
+            "name": "Shining Armor",
+            "drive_id": "1PUUS71w2ik0uuycNB30nXFze8C7O8OzY",
+            "is_singing": false
+        },
+        {
+            "name": "Tirek",
+            "drive_id": "1rcPDqgDeCIHGDdvfOo-fxfA1XeM4g3CB",
+            "is_singing": false
         }
     ]}
 ]
