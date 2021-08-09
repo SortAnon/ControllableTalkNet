@@ -24,3 +24,4 @@ ffmpeg-python==0.2.0
 tqdm
 gdown==3.13.0
 editdistance==0.5.3
+ipywidgets==7.6.3
