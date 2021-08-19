@@ -1,6 +1,7 @@
 tensorflow==2.4.1
 tensorboard==2.4.1
 dash==1.21.0
+dash-bootstrap-components==0.13.0
 jupyter-dash==0.4.0
 psola==0.0.1
 wget==3.2

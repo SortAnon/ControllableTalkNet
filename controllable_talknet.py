@@ -5,6 +5,7 @@ import dash
 from jupyter_dash import JupyterDash
 import dash_core_components as dcc
 import dash_html_components as html
+import dash_bootstrap_components as dbc
 from dash.exceptions import PreventUpdate
 import torch
 import numpy as np
@@ -64,7 +65,7 @@ app.layout = html.Div(
             },
         ),
         html.Label("Character selection", htmlFor="model-dropdown"),
-        dcc.Dropdown(
+        dbc.Select(
             id="model-dropdown",
             options=[
                 {
@@ -117,7 +118,7 @@ app.layout = html.Div(
                                 "margin-right": "10px",
                             },
                         ),
-                        dcc.Dropdown(
+                        dbc.Select(
                             id="reference-dropdown",
                             options=[],
                             value=None,
@@ -720,6 +721,9 @@ def debug_pitch(n_clicks, pitch_clicks, current_f0s):
     return [f0_to_audio(current_f0s), playback_style, pitch_clicks]
 
 
+hifigan_sr = None
+
+
 def download_model(model, custom_model):
     try:
         global hifigan_sr, h2, denoiser_sr
@@ -759,7 +763,8 @@ def download_model(model, custom_model):
             )
         if not os.path.exists(sr_path):
             raise Exception("HiFI-GAN model failed to download!")
-        hifigan_sr, h2, denoiser_sr = load_hifigan(sr_path, "config_32k")
+        if hifigan_sr is None:
+            hifigan_sr, h2, denoiser_sr = load_hifigan(sr_path, "config_32k")
 
         return (
             None,
@@ -860,6 +865,7 @@ def generate_audio(
                     tndurs = None
                     tnpitch = None
                 tnmodel.eval()
+                tnpath = talknet_path
 
             tokens = tnmodel.parse(text=transcript.strip())
             arpa = ""
@@ -893,6 +899,7 @@ def generate_audio(
 
             if hifipath != hifigan_path:
                 hifigan, h, denoiser = load_hifigan(hifigan_path, "config_v1")
+                hifipath = hifigan_path
 
             y_g_hat = hifigan(spect.float())
             audio = y_g_hat.squeeze()
