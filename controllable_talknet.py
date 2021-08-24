@@ -7,6 +7,7 @@ import dash_core_components as dcc
 import dash_html_components as html
 import dash_bootstrap_components as dbc
 from dash.exceptions import PreventUpdate
+from nemo.core.classes.exportable import Exportable
 import torch
 import numpy as np
 import tensorflow as tf
@@ -43,6 +44,8 @@ CPU_PITCH = False
 RUN_PATH = os.path.dirname(os.path.realpath(__file__))
 if RUN_PATH == "/content":
     UI_MODE = "colab"
+elif os.path.exists("/talknet/is_docker"):
+    UI_MODE = "docker"
 else:
     UI_MODE = "offline"
 torch.set_grad_enabled(False)
@@ -102,6 +105,15 @@ app.layout = html.Div(
         html.Label(
             "Upload reference audio to " + RUN_PATH,
             htmlFor="reference-dropdown",
+            id="upload-label",
+        ),
+        dcc.Upload(
+            id="upload-audio",
+            children=html.Div(["Drag and drop or click to select a file to upload."]),
+            style={
+                "display": "none",
+            },
+            multiple=True,
         ),
         dcc.Store(id="current-f0s"),
         dcc.Store(id="current-f0s-nosilence"),
@@ -264,12 +276,43 @@ app.layout = html.Div(
     },
 )
 
+upload_display = {
+    "width": "100%",
+    "height": "60px",
+    "lineHeight": "60px",
+    "borderWidth": "1px",
+    "borderStyle": "dashed",
+    "borderRadius": "5px",
+    "textAlign": "center",
+    "margin": "10px",
+}
+
+playback_style = {
+    "margin-top": "0.3em",
+    "margin-bottom": "0.3em",
+    "display": "block",
+    "width": "600px",
+    "max-width": "90vw",
+}
+
+playback_hide = {
+    "display": "none",
+}
+
 
 @app.callback(
-    dash.dependencies.Output("model-dropdown", "options"),
+    [
+        dash.dependencies.Output("model-dropdown", "options"),
+        dash.dependencies.Output("upload-audio", "style"),
+    ],
     dash.dependencies.Input("header", "children"),
 )
 def init_dropdown(value):
+    if UI_MODE == "docker":
+        upload_style = upload_display
+    else:
+        upload_style = playback_hide
+
     dropdown = [
         {
             "label": "Custom model",
@@ -373,7 +416,7 @@ def init_dropdown(value):
                 "disabled": True,
             }
         )
-    return dropdown
+    return [dropdown, upload_style]
 
 
 def load_hifigan(model_name, conf_name):
@@ -673,17 +716,25 @@ def update_pitch_options(value):
     return ["pf" not in value, "dra" in value, "dra" in value]
 
 
-playback_style = {
-    "margin-top": "0.3em",
-    "margin-bottom": "0.3em",
-    "display": "block",
-    "width": "600px",
-    "max-width": "90vw",
-}
-
-playback_hide = {
-    "display": "none",
-}
+@app.callback(
+    dash.dependencies.Output("upload-label", "children"),
+    [
+        dash.dependencies.Input("upload-audio", "filename"),
+        dash.dependencies.Input("upload-audio", "contents"),
+    ],
+)
+def save_upload(uploaded_filenames, uploaded_file_contents):
+    try:
+        if uploaded_filenames is not None and uploaded_file_contents is not None:
+            for name, content in zip(uploaded_filenames, uploaded_file_contents):
+                if name.strip() == "":
+                    continue
+                data = content.encode("utf8").split(b";base64,")[1]
+                with open(os.path.join(RUN_PATH, name), "wb") as fp:
+                    fp.write(base64.decodebytes(data))
+    except Exception as e:
+        return str(e)
+    return "Uploaded " + str(len(uploaded_filenames)) + " file(s)"
 
 
 @app.callback(
