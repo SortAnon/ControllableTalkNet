@@ -19,7 +19,7 @@ and extract it to a folder.
 * When it's done, run talknet.bat to start TalkNet on http://127.0.0.1:8050/. To download updates, run update.bat.
 
 ### Docker (Linux)
-* Install Docker, NVIDIA Container Toolkit, and CUDA Toolkit 11.x.
+* Install Docker and NVIDIA Container Toolkit.
 * [Download the Dockerfile.](https://raw.githubusercontent.com/SortAnon/ControllableTalkNet/main/Dockerfile)
 Open a terminal, and navigate to the directory where you saved it.
 * Run ```docker build -t talknet-offline .``` to build the image. Add ```sudo``` if you're not using rootless Docker.
