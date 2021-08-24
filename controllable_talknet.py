@@ -463,7 +463,89 @@ def preprocess_tokens(tokens, blank):
     return tokens
 
 
-def get_duration(wav_name, transcript):
+parser = (
+    nemo.collections.asr.data.audio_to_text.AudioToCharWithDursF0Dataset.make_vocab(
+        notation="phonemes",
+        punct=True,
+        spaces=True,
+        stresses=False,
+        add_blank_at="last",
+    )
+)
+
+
+def arpa_parse(input, model):
+    z = []
+    space = parser.labels.index(" ")
+    while "{" in input:
+        if "}" not in input:
+            input.replace("{", "")
+        else:
+            pre = input[: input.find("{")]
+            if pre.strip() != "":
+                x = model.parse(text=pre.strip())
+                seq_ids = x.squeeze(0).cpu().detach().numpy()
+                z.extend(seq_ids)
+            z.append(space)
+
+            arpaword = input[input.find("{") + 1 : input.find("}")]
+            arpaword = (
+                arpaword.replace("0", "")
+                .replace("1", "")
+                .replace("2", "")
+                .strip()
+                .split(" ")
+            )
+
+            seq_ids = []
+            for x in arpaword:
+                if x == "":
+                    continue
+                if x.replace("_", " ") not in parser.labels:
+                    continue
+                seq_ids.append(parser.labels.index(x.replace("_", " ")))
+            seq_ids.append(space)
+            z.extend(seq_ids)
+            input = input[input.find("}") + 1 :]
+    if input != "":
+        x = model.parse(text=input.strip())
+        seq_ids = x.squeeze(0).cpu().detach().numpy()
+        z.extend(seq_ids)
+    if z[-1] == space:
+        z = z[:-1]
+    if z[0] == space:
+        z = z[1:]
+    return [
+        z[i] for i in range(len(z)) if (i == 0) or (z[i] != z[i - 1]) or (z[i] != space)
+    ]
+
+
+def to_arpa(input):
+    arpa = ""
+    z = []
+    space = parser.labels.index(" ")
+    while space in input:
+        z.append(input[: input.index(space)])
+        input = input[input.index(space) + 1 :]
+    z.append(input)
+    for y in z:
+        if len(y) == 0:
+            continue
+
+        arpaword = " {"
+        for s in y:
+            if parser.labels[s] == " ":
+                arpaword += "_ "
+            else:
+                arpaword += parser.labels[s] + " "
+        arpaword += "} "
+        if not arpaword.replace("{", "").replace("}", "").replace(" ", "").isalnum():
+            arpaword = arpaword.replace("{", "").replace(" }", "")
+        arpa += arpaword
+    return arpa.replace("  ", " ").replace(" }", "}").strip()
+
+
+def get_duration(wav_name, transcript, tokens):
     if not os.path.exists(os.path.join(RUN_PATH, "temp")):
         os.mkdir(os.path.join(RUN_PATH, "temp"))
     if "_" not in transcript:
@@ -484,16 +566,6 @@ def get_duration(wav_name, transcript):
         "sample_rate": 22050,
         "batch_size": 1,
     }
-
-    parser = (
-        nemo.collections.asr.data.audio_to_text.AudioToCharWithDursF0Dataset.make_vocab(
-            notation="phonemes",
-            punct=True,
-            spaces=True,
-            stresses=False,
-            add_blank_at="last",
-        )
-    )
 
     dataset = nemo.collections.asr.data.audio_to_text._AudioTextDataset(
         manifest_filepath=data_config["manifest_filepath"],
@@ -516,43 +588,14 @@ def get_duration(wav_name, transcript):
         )
 
         log_probs = log_probs[0].cpu().detach().numpy()
-        if "_" not in transcript:
-            seq_ids = test_sample[2][0].cpu().detach().numpy()
-        else:
-            pass
-            """arpa_input = (
-                transcript.replace("0", "")
-                .replace("1", "")
-                .replace("2", "")
-                .replace("_", " _ ")
-                .strip()
-                .split(" ")
-            )
-
-            seq_ids = []
-            for x in arpa_input:
-                if x == "":
-                    continue
-                if x.replace("_", " ") not in parser.labels:
-                    continue
-                seq_ids.append(parser.labels.index(x.replace("_", " ")))"""
-
-        seq_ids = test_sample[2][0].cpu().detach().numpy()
-        target_tokens = preprocess_tokens(seq_ids, blank_id)
+        target_tokens = preprocess_tokens(tokens, blank_id)
 
         f, p = forward_extractor(target_tokens, log_probs, blank_id)
         durs = backward_extractor(f, p)
 
-        arpa = ""
-        for s in seq_ids:
-            if parser.labels[s] == " ":
-                arpa += "_ "
-            else:
-                arpa += parser.labels[s] + " "
-
         del test_sample
-        return durs, arpa.strip(), seq_ids
-    return None, None, None
+        return durs
+    return None
 
 
 def crepe_f0(wav_path, hop_length=256):
@@ -867,8 +910,9 @@ def generate_audio(
                 tnmodel.eval()
                 tnpath = talknet_path
 
-            tokens = tnmodel.parse(text=transcript.strip())
-            arpa = ""
+            token_list = arpa_parse(transcript, tnmodel)
+            tokens = torch.IntTensor(token_list).view(1, -1).to(DEVICE)
+            arpa = to_arpa(token_list)
 
             if "dra" in pitch_options:
                 if tndurs is None or tnpitch is None:
@@ -880,7 +924,7 @@ def generate_audio(
                     ]
                 spect = tnmodel.generate_spectrogram(tokens=tokens)
             else:
-                durs, arpa, t = get_duration(wav_name, transcript)
+                durs = get_duration(wav_name, transcript, token_list)
 
                 # Change pitch
                 if "pf" in pitch_options:
