@@ -22,5 +22,5 @@ and extract it to a folder.
 * Install Docker, NVIDIA Container Toolkit, and CUDA Toolkit 11.x.
 * [Download the Dockerfile.](https://raw.githubusercontent.com/SortAnon/ControllableTalkNet/main/Dockerfile)
 Open a terminal, and navigate to the directory where you saved it.
-* Run ```docker build -t talknet-offline``` to build the image. Add ```sudo``` if you're not using rootless Docker.
+* Run ```docker build -t talknet-offline .``` to build the image. Add ```sudo``` if you're not using rootless Docker.
 * Run ```docker run -it --gpus all -p 8050:8050 talknet-offline``` to start TalkNet on http://127.0.0.1:8050/.
