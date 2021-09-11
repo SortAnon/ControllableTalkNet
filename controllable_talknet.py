@@ -30,6 +30,7 @@ import traceback
 import ffmpeg
 import time
 import uuid
+import re
 
 sys.path.append("hifi-gan")
 from env import AttrDict
@@ -50,6 +51,7 @@ else:
 torch.set_grad_enabled(False)
 if CPU_PITCH:
     tf.config.set_visible_devices([], "GPU")
+DICT_PATH = os.path.join(RUN_PATH, "horsewords.clean")
 
 app.title = "Controllable TalkNet"
 app.layout = html.Div(
@@ -515,10 +517,36 @@ parser = (
     )
 )
 
+arpadict = None
+
+
+def load_dictionary(dict_path):
+    arpadict = dict()
+    with open(dict_path, "r", encoding="utf8") as f:
+        for l in f.readlines():
+            word = l.split("  ")
+            assert len(word) == 2
+            arpadict[word[0].strip().upper()] = word[1].strip()
+    return arpadict
+
+
+def replace_words(input, dictionary):
+    regex = re.findall(r"[\w'-]+|[^\w'-]", input)
+    assert input == "".join(regex)
+    for i in range(len(regex)):
+        word = regex[i].upper()
+        if word in dictionary.keys():
+            regex[i] = "{" + dictionary[word] + "}"
+    return "".join(regex)
+
 
 def arpa_parse(input, model):
+    global arpadict
+    if arpadict is None:
+        arpadict = load_dictionary(DICT_PATH)
     z = []
     space = parser.labels.index(" ")
+    input = replace_words(input, arpadict)
     while "{" in input:
         if "}" not in input:
             input.replace("{", "")
