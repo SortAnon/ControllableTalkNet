@@ -547,6 +547,8 @@ def arpa_parse(input, model):
     z = []
     space = parser.labels.index(" ")
     input = replace_words(input, arpadict)
+    input = input.replace("\n", " \n")
+    input = input.replace(".", ". ")
     while "{" in input:
         if "}" not in input:
             input.replace("{", "")
