@@ -49,7 +49,10 @@ class HiFiGAN:
         audio = y_g_hat.squeeze()
         audio = audio * MAX_WAV_VALUE
         audio_denoised = self.denoiser(audio.view(1, -1), strength=35)[:, 0]
-        return audio_denoised.detach().cpu().numpy().reshape(-1).astype(np.int16)
+        return (
+            audio_denoised.detach().cpu().numpy().reshape(-1).astype(np.int16),
+            audio_denoised.detach().cpu(),
+        )
 
     def superres(self, audio, original_sr):
         # Resampling

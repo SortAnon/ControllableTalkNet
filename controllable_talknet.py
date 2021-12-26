@@ -323,6 +323,12 @@ app.layout = html.Div(
                                 target="_blank",
                             ),
                             html.Br(),
+                            html.A(
+                                "torchcrepe",
+                                href="https://pypi.org/project/torchcrepe/",
+                                target="_blank",
+                            ),
+                            html.Br(),
                         ]
                     )
                 ),
@@ -583,12 +589,12 @@ def select_file(dropdown_value):
             map_metadata="-1",
             fflags="+bitexact",
         ).overwrite_output().run(quiet=True)
-        fo_with_silence, f0_wo_silence = extract_pitch.get_pitch(
+        f0_with_silence, f0_wo_silence = extract_pitch.get_pitch(
             os.path.join(RUN_PATH, "temp", dropdown_value + "_conv.wav")
         )
         return [
             "Analyzed " + dropdown_value,
-            fo_with_silence,
+            f0_with_silence,
             f0_wo_silence,
             dropdown_value,
         ]
@@ -748,11 +754,11 @@ def generate_audio(
             if last_voc != vocoder_path:
                 voc = vocoder.HiFiGAN(vocoder_path, "config_v1", DEVICE)
                 last_voc = vocoder_path
-            audio = voc.vocode(spect)
+            audio, audio_torch = voc.vocode(spect)
 
             # Auto-tuning
             if "pc" in pitch_options and "dra" not in pitch_options:
-                audio = extract_pitch.auto_tune(audio, f0s_wo_silence)
+                audio = extract_pitch.auto_tune(audio, audio_torch, f0s_wo_silence)
 
             # Super-resolution
             if sr_voc is None:

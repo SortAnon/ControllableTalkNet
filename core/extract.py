@@ -28,6 +28,14 @@ import psola
 import crepe
 import io
 import base64
+import tensorflow_hub as hub
+import tensorflow as tf
+import scipy
+import resampy
+import torchcrepe
+
+
+USE_SPICE = False  # Better than CREPE in some cases, but a lot worse with noisy audio
 
 
 class ExtractDuration:
@@ -243,10 +251,9 @@ class ExtractDuration:
 
 class ExtractPitch:
     def __init__(self):
-        pass
+        self.spice = None
 
     def _crepe_f0(self, wav_path, hop_length=256):
-        # sr, audio = wavfile.read(io.BytesIO(wav_data))
         sr, audio = wavfile.read(wav_path)
         audio_x = np.arange(0, len(audio)) / 22050.0
         f0time, frequency, confidence, activation = crepe.predict(
@@ -255,6 +262,7 @@ class ExtractPitch:
 
         x = np.arange(0, len(audio), hop_length) / 22050.0
         freq_interp = np.interp(x, f0time, frequency)
+        freq_interp_nothreshold = np.interp(x, f0time, frequency)
         conf_interp = np.interp(x, f0time, confidence)
         audio_interp = np.interp(x, audio_x, np.absolute(audio)) / 32768.0
         weights = [0.5, 0.25, 0.25]
@@ -271,9 +279,122 @@ class ExtractPitch:
         # Hack to make f0 and mel lengths equal
         if len(audio) % hop_length == 0:
             freq_interp = np.pad(freq_interp, pad_width=[0, 1])
+            conf_interp = np.pad(conf_interp, pad_width=[0, 1])
         return (
             torch.from_numpy(freq_interp.astype(np.float32)),
+            torch.from_numpy(freq_interp_nothreshold.astype(np.float32)),
+            torch.from_numpy(conf_interp.astype(np.float32)),
             torch.from_numpy(frequency.astype(np.float32)),
+        )
+
+    def _spice_f0(self, wav_path, hop_length=256):
+        if self.spice is None:
+            self.spice = hub.load("https://tfhub.dev/google/spice/2")
+
+        def output2hz(pitch_output):
+            # Constants taken from https://tfhub.dev/google/spice/2
+            PT_OFFSET = 25.58
+            PT_SLOPE = 63.07
+            FMIN = 10.0
+            BINS_PER_OCTAVE = 12.0
+            cqt_bin = pitch_output * PT_SLOPE + PT_OFFSET
+            return FMIN * 2.0 ** (1.0 * cqt_bin / BINS_PER_OCTAVE)
+
+        # Resampling
+        sr, audio = wavfile.read(wav_path)
+        audio_x = np.arange(0, len(audio)) / 22050.0
+        wave = resampy.resample(
+            audio,
+            sr,
+            16000,
+            filter="sinc_window",
+            window=scipy.signal.windows.hann,
+            num_zeros=8,
+        ).astype(np.float32)
+
+        # Prediction
+        output = self.spice.signatures["serving_default"](tf.constant(wave))
+        frequency = [output2hz(p) for p in output["pitch"]]
+        confidence = 1.0 - output["uncertainty"]
+
+        # Interpolation
+        x = np.arange(0, len(audio), hop_length) / 22050.0
+        xp = np.arange(0, len(frequency)) * 0.032
+        xp_threshold = []
+        fp_threshold = []
+        conf_threshold = 0.25
+        for i in range(len(xp)):
+            if confidence[i] >= conf_threshold:
+                xp_threshold.append(xp[i])
+                fp_threshold.append(frequency[i])
+        freq_zeroes = np.interp(x, xp, frequency)
+        freq_threshold = np.interp(x, xp_threshold, fp_threshold)
+        conf_interp = np.interp(x, xp, confidence)
+        audio_interp = np.interp(x, audio_x, np.absolute(audio)) / 32768.0
+        weights = [0.5, 0.25, 0.25]
+        audio_smooth = np.convolve(audio_interp, np.array(weights)[::-1], "same")
+
+        audio_threshold = 0.0005
+        for i in range(len(freq_zeroes)):
+            if conf_interp[i] < conf_threshold:
+                freq_zeroes[i] = 0.0
+            if audio_smooth[i] < audio_threshold:
+                freq_zeroes[i] = 0.0
+
+        # Hack to make f0 and mel lengths equal
+        if len(audio) % hop_length == 0:
+            freq_zeroes = np.pad(freq_zeroes, pad_width=[0, 1])
+            freq_threshold = np.pad(freq_threshold, pad_width=[0, 1])
+            conf_interp = np.pad(conf_interp, pad_width=[0, 1])
+
+        return (
+            torch.from_numpy(freq_zeroes.astype(np.float32)),
+            torch.from_numpy(freq_threshold.astype(np.float32)),
+            torch.from_numpy(conf_interp.astype(np.float32)),
+        )
+
+    def _torchcrepe_f0(self, wav_path, hop_length=256):
+        audio, sr = torchcrepe.load.audio(wav_path)
+        audio_numpy = audio.squeeze(0).numpy()
+        audio_x = np.arange(0, len(audio_numpy)) / 22050.0
+
+        frequency, confidence = torchcrepe.predict(
+            audio,
+            sr,
+            hop_length=256,
+            fmin=50,
+            fmax=800,
+            model="full",
+            decoder=torchcrepe.decode.viterbi,
+            return_periodicity=True,
+            batch_size=128,
+            device="cuda:0",
+        )
+
+        x = np.arange(0, len(audio_numpy), hop_length) / 22050.0
+        orig_frequency = frequency.squeeze(0).numpy()[: len(x)]
+        frequency = frequency.squeeze(0).numpy()[: len(x)]
+        confidence = confidence.squeeze(0).numpy()[: len(x)]
+        audio_interp = np.interp(x, audio_x, np.absolute(audio_numpy))
+        weights = [0.5, 0.25, 0.25]
+        audio_smooth = np.convolve(audio_interp, np.array(weights)[::-1], "same")
+        conf_smooth = np.convolve(confidence, np.array(weights)[::-1], "same")
+
+        conf_threshold = 0.04
+        audio_threshold = 0.0005
+        for i in range(len(frequency)):
+            if conf_smooth[i] < conf_threshold:
+                frequency[i] = 0.0
+            if audio_smooth[i] < audio_threshold:
+                frequency[i] = 0.0
+
+        # Hack to make f0 and mel lengths equal
+        if len(audio_numpy) % hop_length == 0:
+            frequency = np.pad(frequency, pad_width=[0, 1])
+            orig_frequency = np.pad(frequency, pad_width=[0, 1])
+        return (
+            torch.from_numpy(frequency.astype(np.float32)),
+            torch.from_numpy(orig_frequency.astype(np.float32)),
         )
 
     def f0_to_audio(self, f0s):
@@ -294,12 +415,41 @@ class ExtractPitch:
         sound = "data:audio/x-wav;base64," + b64.decode("ascii")
         return sound
 
-    def get_pitch(self, wav_path):
-        freq_interp, frequency = self._crepe_f0(wav_path)
-        return freq_interp, frequency
+    def get_pitch(self, wav_path, legacy=True):
+        if USE_SPICE:
+            crepe_zeroes, crepe_nozeroes, crepe_confidence, crepe_raw = self._crepe_f0(
+                wav_path
+            )
+            spice_zeroes, spice_threshold, spice_confidence = self._spice_f0(wav_path)
+            for i in range(len(spice_threshold)):
+                if crepe_zeroes[i] == 0.0:
+                    spice_threshold[i] = 0.0
+            return spice_threshold, crepe_raw
+        else:
+            torchcrepe_zeroes, torchcrepe_nozeroes = self._torchcrepe_f0(wav_path)
+            if legacy:
+                crepe_zeroes, _, _, crepe_raw = self._crepe_f0(wav_path)
+                for i in range(len(crepe_zeroes)):
+                    if crepe_zeroes[i] != 0.0:
+                        crepe_zeroes[i] = torchcrepe_nozeroes[i]
+                return crepe_zeroes, torchcrepe_nozeroes
+            else:
+                return torchcrepe_zeroes, torchcrepe_nozeroes
 
-    def auto_tune(self, audio_np, f0s_wo_silence):
-        _, output_freq, _, _ = crepe.predict(audio_np, 22050, viterbi=True)
+    def auto_tune(self, audio_np, audio_torch, f0s_wo_silence):
+        output_freq = torchcrepe.predict(
+            audio_torch / 32768.0,
+            22050,
+            hop_length=256,
+            fmin=50,
+            fmax=800,
+            model="full",
+            decoder=torchcrepe.decode.viterbi,
+            return_periodicity=False,
+            batch_size=128,
+            device="cuda:0",
+        )
+        output_freq = output_freq.squeeze(0).cpu().numpy()[: len(f0s_wo_silence)]
         output_pitch = torch.from_numpy(output_freq.astype(np.float32))
         target_pitch = torch.FloatTensor(f0s_wo_silence)
         factor = torch.mean(output_pitch) / torch.mean(target_pitch)
