@@ -186,7 +186,7 @@ app.layout = html.Div(
                         {"label": "Auto-tune output", "value": "pc"},
                         {"label": "Disable reference audio", "value": "dra"},
                         {"label": "Reduce metallic noise (slow)", "value": "srec"},
-                        #{"label": "Alternate pitch detector", "value": "pitch"},
+                        # {"label": "Alternate pitch detector", "value": "pitch"},
                     ],
                     value=[],
                 ),
@@ -779,18 +779,18 @@ def generate_audio(
                 last_voc = vocoder_path
             audio, audio_torch = voc.vocode(spect)
 
-            # Auto-tuning
-            if "pc" in pitch_options and "dra" not in pitch_options:
-                audio = extract_pitch.auto_tune(audio, audio_torch, f0s_wo_silence)
-
             # Reconstruction
             if "srec" in pitch_options:
-                new_spect = reconstruct_inst.reconstruct(audio)
+                new_spect = reconstruct_inst.reconstruct(spect)
                 if rec_voc is None:
                     rec_voc = vocoder.HiFiGAN(
                         os.path.join(RUN_PATH, "models", "hifirec"), "config_v1", DEVICE
                     )
                 audio, audio_torch = rec_voc.vocode(new_spect)
+
+            # Auto-tuning
+            if "pc" in pitch_options and "dra" not in pitch_options:
+                audio = extract_pitch.auto_tune(audio, audio_torch, f0s_wo_silence)
 
             # Super-resolution
             if sr_voc is None:

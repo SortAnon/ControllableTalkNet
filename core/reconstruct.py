@@ -47,23 +47,26 @@ class Reconstruct:
         model = torch.load(ckpt_path, map_location="cpu")
         return model.eval()
 
-    def _preprocess_spect(self, audio, resolution):
-        wave = audio / MAX_WAV_VALUE
-        wave = torch.FloatTensor(wave).to(torch.device(self.device))
-        spect = (
-            mel_spectrogram(
-                wave.unsqueeze(0),
-                2048,  # n_fft
-                resolution,  # num_mels
-                22050,  # sampling_rate
-                256,  # hop_size
-                1024,  # win_size
-                0,  # fmin
-                8000,  # fmax
+    def _preprocess_spect(self, input, resolution, is_audio):
+        if is_audio:
+            wave = input / MAX_WAV_VALUE
+            wave = torch.FloatTensor(wave).to(torch.device(self.device))
+            spect = (
+                mel_spectrogram(
+                    wave.unsqueeze(0),
+                    2048,  # n_fft
+                    resolution,  # num_mels
+                    22050,  # sampling_rate
+                    256,  # hop_size
+                    1024,  # win_size
+                    0,  # fmin
+                    8000,  # fmax
+                )
+                .cpu()
+                .numpy()
             )
-            .cpu()
-            .numpy()
-        )
+        else:
+            spect = input.cpu().numpy()
         spect = (spect + 11.512925) / 6.907755  # log(1e-5) to log(1e1) -> 0 to 2
         if self.normalize_input:
             spect /= 2.0
@@ -151,14 +154,14 @@ class Reconstruct:
             assert x.shape[3] == xrec.shape[3]
         return xrec
 
-    def reconstruct(self, audio):
+    def reconstruct(self, input, is_audio=False):
         if self.vqgan is None:
             config, self.resolution = self._load_config(self.config_path)
             self.vqgan = self._load_vqgan(
                 config,
                 ckpt_path=self.checkpoint_path,
             )
-        x = self._preprocess_spect(audio, self.resolution)
+        x = self._preprocess_spect(input, self.resolution, is_audio)
         x_low, x_high = self._low_high_pass(x, 19, 8)
         y = self._reconstruct_with_vqgan(x, self.vqgan)
         y_low, y_high = self._low_high_pass(y, 19, 8)

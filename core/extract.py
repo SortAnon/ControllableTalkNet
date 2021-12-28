@@ -426,14 +426,15 @@ class ExtractPitch:
                     spice_threshold[i] = 0.0
             return spice_threshold, crepe_raw
         else:
-            torchcrepe_zeroes, torchcrepe_nozeroes = self._torchcrepe_f0(wav_path)
             if legacy:
                 crepe_zeroes, _, _, crepe_raw = self._crepe_f0(wav_path)
-                """for i in range(len(crepe_zeroes)):
+                """torchcrepe_zeroes, torchcrepe_nozeroes = self._torchcrepe_f0(wav_path)
+                for i in range(len(crepe_zeroes)):
                     if crepe_zeroes[i] != 0.0:
                         crepe_zeroes[i] = torchcrepe_nozeroes[i]"""
-                return crepe_zeroes, torchcrepe_nozeroes
+                return crepe_zeroes, crepe_raw
             else:
+                torchcrepe_zeroes, torchcrepe_nozeroes = self._torchcrepe_f0(wav_path)
                 return torchcrepe_zeroes, torchcrepe_nozeroes
 
     def auto_tune(self, audio_np, audio_torch, f0s_wo_silence):
