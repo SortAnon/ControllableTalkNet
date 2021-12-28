@@ -1,0 +1,39 @@
+model:
+  base_learning_rate: 4.5e-06
+  target: taming.models.vqgan.VQModel
+  params:
+    embed_dim: 256
+    n_embed: 1024
+    ddconfig:
+      double_z: false
+      z_channels: 256
+      resolution: 240
+      in_channels: 1
+      out_ch: 1
+      ch: 128
+      ch_mult:
+      - 1
+      - 1
+      - 2
+      - 4
+      num_res_blocks: 2
+      attn_resolutions:
+      - 32
+      dropout: 0.0
+    lossconfig:
+      target: taming.modules.losses.DummyLoss
+data:
+  target: main.DataModuleFromConfig
+  params:
+    batch_size: 5
+    num_workers: 4
+    train:
+      target: taming.data.spect.SpectTrain
+      params:
+        training_spect_list_file: vqgan_train.txt
+        size: 240
+    validation:
+      target: taming.data.spect.SpectTest
+      params:
+        test_spect_list_file: vqgan_val.txt
+        size: 240

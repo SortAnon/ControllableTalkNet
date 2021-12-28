@@ -29,4 +29,5 @@ gdown==3.13.0
 editdistance==0.5.3
 ipywidgets==7.6.3
 torchcrepe==0.0.15
-git+git://github.com/CompVis/taming-transformers@9d17ea64b820f7633ea6b8823e1f78729447cb57#egg=taming-transformers
+taming-transformers-rom1504==0.0.6
+einops==0.3.2

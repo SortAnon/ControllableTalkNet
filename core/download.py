@@ -49,13 +49,39 @@ def download_from_drive(model, custom_model, run_path):
             os.remove(zip_path)
 
         # Download super-resolution HiFi-GAN
-        sr_path = os.path.join(run_path, "hifi-gan", "hifisr")
+        sr_path = os.path.join(run_path, "models", "hifisr")
         if not os.path.exists(sr_path):
             gdown.download(
                 d + "14fOprFAIlCQkVRxsfInhEPG0n-xN4QOa", sr_path, quiet=False
             )
         if not os.path.exists(sr_path):
             raise Exception("Super-res model failed to download!")
+
+        # Download VQGAN reconstruction model
+        rec_path = os.path.join(
+            run_path,
+            "models",
+            "vqgan32_universal_57000.ckpt",
+        )
+        if not os.path.exists(rec_path):
+            gdown.download(
+                d + "1wlilvBtlBiAUEqqdqE0AEqo-UKx2X_cL", rec_path, quiet=False
+            )
+        if not os.path.exists(rec_path):
+            raise Exception("Reconstruction VQGAN failed to download!")
+
+        # Download reconstruction HiFi-GAN
+        rec_path = os.path.join(
+            run_path,
+            "models",
+            "hifirec",
+        )
+        if not os.path.exists(rec_path):
+            gdown.download(
+                d + "12gRIdg65xWiSScvFUFPT5JoPRsijQN90", rec_path, quiet=False
+            )
+        if not os.path.exists(rec_path):
+            raise Exception("Reconstruction HiFi-GAN failed to download!")
 
         return (
             None,

@@ -20,7 +20,7 @@ import traceback
 import ffmpeg
 import time
 import uuid
-from core import extract, vocoder
+from core import extract, vocoder, reconstruct
 from core.download import download_from_drive
 
 app = JupyterDash(__name__)
@@ -39,6 +39,19 @@ if CPU_PITCH:
 
 extract_dur = extract.ExtractDuration(RUN_PATH, DEVICE)
 extract_pitch = extract.ExtractPitch()
+reconstruct_inst = reconstruct.Reconstruct(
+    DEVICE,
+    os.path.join(
+        RUN_PATH,
+        "core",
+        "vqgan_config.yaml",
+    ),
+    os.path.join(
+        RUN_PATH,
+        "models",
+        "vqgan32_universal_57000.ckpt",
+    ),
+)
 
 app.title = "Controllable TalkNet"
 app.layout = html.Div(
@@ -172,6 +185,8 @@ app.layout = html.Div(
                         {"label": "Change input pitch", "value": "pf"},
                         {"label": "Auto-tune output", "value": "pc"},
                         {"label": "Disable reference audio", "value": "dra"},
+                        {"label": "Reduce metallic noise (slow)", "value": "srec"},
+                        #{"label": "Alternate pitch detector", "value": "pitch"},
                     ],
                     value=[],
                 ),
@@ -256,7 +271,7 @@ app.layout = html.Div(
         html.A("License info", href="#", id="open"),
         dbc.Modal(
             [
-                dbc.ModalHeader("License"),
+                dbc.ModalHeader("About"),
                 dbc.ModalBody(
                     html.Div(
                         children=[
@@ -307,7 +322,7 @@ app.layout = html.Div(
                             html.Br(),
                             html.A(
                                 "Taming Transformers",
-                                href="https://pypi.org/project/taming-transformers/",
+                                href="https://github.com/CompVis/taming-transformers",
                                 target="_blank",
                             ),
                             html.Br(),
@@ -576,8 +591,9 @@ def update_filelist(n_clicks):
     [
         dash.dependencies.Input("reference-dropdown", "value"),
     ],
+    [dash.dependencies.State("pitch-options", "value")],
 )
-def select_file(dropdown_value):
+def select_file(dropdown_value, pitch_options):
     if dropdown_value is not None:
         if not os.path.exists(os.path.join(RUN_PATH, "temp")):
             os.mkdir(os.path.join(RUN_PATH, "temp"))
@@ -589,9 +605,16 @@ def select_file(dropdown_value):
             map_metadata="-1",
             fflags="+bitexact",
         ).overwrite_output().run(quiet=True)
-        f0_with_silence, f0_wo_silence = extract_pitch.get_pitch(
-            os.path.join(RUN_PATH, "temp", dropdown_value + "_conv.wav")
-        )
+        if "pitch" in pitch_options:
+            f0_with_silence, f0_wo_silence = extract_pitch.get_pitch(
+                os.path.join(RUN_PATH, "temp", dropdown_value + "_conv.wav"),
+                legacy=False,
+            )
+        else:
+            f0_with_silence, f0_wo_silence = extract_pitch.get_pitch(
+                os.path.join(RUN_PATH, "temp", dropdown_value + "_conv.wav"),
+                legacy=True,
+            )
         return [
             "Analyzed " + dropdown_value,
             f0_with_silence,
@@ -630,7 +653,7 @@ def debug_pitch(n_clicks, pitch_clicks, current_f0s):
 
 
 tnmodel, tnpath, tndurs, tnpitch = None, None, None, None
-voc, last_voc, sr_voc = None, None, None
+voc, last_voc, sr_voc, rec_voc = None, None, None, None
 
 
 @app.callback(
@@ -663,7 +686,7 @@ def generate_audio(
     f0s,
     f0s_wo_silence,
 ):
-    global tnmodel, tnpath, tndurs, tnpitch, voc, last_voc, sr_voc
+    global tnmodel, tnpath, tndurs, tnpitch, voc, last_voc, sr_voc, rec_voc
 
     if n_clicks is None:
         raise PreventUpdate
@@ -760,10 +783,19 @@ def generate_audio(
             if "pc" in pitch_options and "dra" not in pitch_options:
                 audio = extract_pitch.auto_tune(audio, audio_torch, f0s_wo_silence)
 
+            # Reconstruction
+            if "srec" in pitch_options:
+                new_spect = reconstruct_inst.reconstruct(audio)
+                if rec_voc is None:
+                    rec_voc = vocoder.HiFiGAN(
+                        os.path.join(RUN_PATH, "models", "hifirec"), "config_v1", DEVICE
+                    )
+                audio, audio_torch = rec_voc.vocode(new_spect)
+
             # Super-resolution
             if sr_voc is None:
                 sr_voc = vocoder.HiFiGAN(
-                    os.path.join(RUN_PATH, "hifi-gan", "hifisr"), "config_32k", DEVICE
+                    os.path.join(RUN_PATH, "models", "hifisr"), "config_32k", DEVICE
                 )
             sr_mix, new_rate = sr_voc.superres(audio, 22050)
 
