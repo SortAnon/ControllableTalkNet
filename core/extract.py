@@ -33,12 +33,46 @@ import tensorflow as tf
 import scipy
 import resampy
 import torchcrepe
+from scipy.signal import savgol_filter
 
 
 USE_SPICE = False  # Better than CREPE in some cases, but a lot worse with noisy audio
 
 
 class ExtractDuration:
+    VOICED = (
+        # Vowels
+        "AA",
+        "AE",
+        "AH",
+        "AO",
+        "AW",
+        "AY",
+        "EH",
+        "ER",
+        "EY",
+        "IH",
+        "IY",
+        "OW",
+        "OY",
+        "UH",
+        "UW",
+        # Consonants
+        "DH",
+        "G",
+        "JH",
+        "L",
+        "M",
+        "N",
+        "NG",
+        "R",
+        "V",
+        "W",
+        "Y",
+        "Z",
+        "ZH",
+    )
+
     def __init__(self, run_path, device):
         self.asr_model = (
             EncDecCTCModel.from_pretrained(model_name="asr_talknet_aligner")
@@ -192,10 +226,15 @@ class ExtractDuration:
         arpa = self._to_arpa(token_list)
         return token_list, tokens, arpa
 
-    def get_duration(self, wav_name, transcript, tokens):
+    def get_duration(self, wav_name, transcript, tokens, use_conv=True):
         if not os.path.exists(os.path.join(self.run_path, "temp")):
             os.mkdir(os.path.join(self.run_path, "temp"))
-        if "_" not in transcript:
+        if not use_conv:
+            self._generate_json(
+                wav_name + "|" + transcript.strip(),
+                os.path.join(self.run_path, "temp", wav_name + ".json"),
+            )
+        elif "_" not in transcript:
             self._generate_json(
                 os.path.join(self.run_path, "temp", wav_name + "_conv.wav")
                 + "|"
@@ -370,20 +409,23 @@ class ExtractPitch:
             batch_size=128,
             device="cuda:0",
         )
+        confidence = torchcrepe.filter.median(confidence, 3)
 
         x = np.arange(0, len(audio_numpy), hop_length) / 22050.0
-        orig_frequency = frequency.squeeze(0).numpy()[: len(x)]
         frequency = frequency.squeeze(0).numpy()[: len(x)]
+        orig_frequency = np.copy(frequency)
         confidence = confidence.squeeze(0).numpy()[: len(x)]
         audio_interp = np.interp(x, audio_x, np.absolute(audio_numpy))
         weights = [0.5, 0.25, 0.25]
         audio_smooth = np.convolve(audio_interp, np.array(weights)[::-1], "same")
-        conf_smooth = np.convolve(confidence, np.array(weights)[::-1], "same")
+
+        frequency = savgol_filter(frequency, 11, 3)
+        orig_frequency = savgol_filter(orig_frequency, 11, 3)
 
         conf_threshold = 0.04
         audio_threshold = 0.0005
         for i in range(len(frequency)):
-            if conf_smooth[i] < conf_threshold:
+            if confidence[i] < conf_threshold:
                 frequency[i] = 0.0
             if audio_smooth[i] < audio_threshold:
                 frequency[i] = 0.0
@@ -391,7 +433,7 @@ class ExtractPitch:
         # Hack to make f0 and mel lengths equal
         if len(audio_numpy) % hop_length == 0:
             frequency = np.pad(frequency, pad_width=[0, 1])
-            orig_frequency = np.pad(frequency, pad_width=[0, 1])
+            orig_frequency = np.pad(orig_frequency, pad_width=[0, 1])
         return (
             torch.from_numpy(frequency.astype(np.float32)),
             torch.from_numpy(orig_frequency.astype(np.float32)),
@@ -438,19 +480,8 @@ class ExtractPitch:
                 return torchcrepe_zeroes, torchcrepe_nozeroes
 
     def auto_tune(self, audio_np, audio_torch, f0s_wo_silence):
-        output_freq = torchcrepe.predict(
-            audio_torch / 32768.0,
-            22050,
-            hop_length=256,
-            fmin=50,
-            fmax=800,
-            model="full",
-            decoder=torchcrepe.decode.viterbi,
-            return_periodicity=False,
-            batch_size=128,
-            device="cuda:0",
-        )
-        output_freq = output_freq.squeeze(0).cpu().numpy()[: len(f0s_wo_silence)]
+        _, output_freq, _, _ = crepe.predict(audio_np, 22050, viterbi=True)
+        # output_freq = output_freq.squeeze(0).cpu().numpy()[: len(f0s_wo_silence)]
         output_pitch = torch.from_numpy(output_freq.astype(np.float32))
         target_pitch = torch.FloatTensor(f0s_wo_silence)
         factor = torch.mean(output_pitch) / torch.mean(target_pitch)
