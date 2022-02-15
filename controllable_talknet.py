@@ -21,7 +21,7 @@ import ffmpeg
 import time
 import uuid
 from core import extract, vocoder, reconstruct
-from core.download import download_from_drive
+from core.download import download_from_drive, download_reconst
 
 app = JupyterDash(__name__)
 DEVICE = "cuda:0"
@@ -781,6 +781,14 @@ def generate_audio(
 
             # Reconstruction
             if "srec" in pitch_options:
+                load_error = download_reconst(RUN_PATH)
+                if load_error is not None:
+                    return [
+                        None,
+                        load_error,
+                        playback_hide,
+                        None,
+                    ]
                 new_spect = reconstruct_inst.reconstruct(spect)
                 if rec_voc is None:
                     rec_voc = vocoder.HiFiGAN(

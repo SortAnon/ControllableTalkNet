@@ -57,6 +57,19 @@ def download_from_drive(model, custom_model, run_path):
         if not os.path.exists(sr_path):
             raise Exception("Super-res model failed to download!")
 
+        return (
+            None,
+            os.path.join(run_path, "models", drive_id, "TalkNetSpect.nemo"),
+            os.path.join(run_path, "models", drive_id, "hifiganmodel"),
+        )
+    except Exception as e:
+        return (str(e), None, None)
+
+
+def download_reconst(run_path):
+    try:
+        d = "https://drive.google.com/uc?id="
+
         # Download VQGAN reconstruction model
         rec_path = os.path.join(
             run_path,
@@ -83,10 +96,6 @@ def download_from_drive(model, custom_model, run_path):
         if not os.path.exists(rec_path):
             raise Exception("Reconstruction HiFi-GAN failed to download!")
 
-        return (
-            None,
-            os.path.join(run_path, "models", drive_id, "TalkNetSpect.nemo"),
-            os.path.join(run_path, "models", drive_id, "hifiganmodel"),
-        )
+        return None
     except Exception as e:
-        return (str(e), None, None)
+        return str(e)
