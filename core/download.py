@@ -39,11 +39,9 @@ def download_from_drive(model, custom_model, run_path):
                 quiet=False,
             )
             if not os.path.exists(zip_path):
-                os.rmdir(os.path.join(run_path, "models", drive_id))
                 return ("Model download failed", None, None)
             if os.stat(zip_path).st_size < 16:
                 os.remove(zip_path)
-                os.rmdir(os.path.join(run_path, "models", drive_id))
                 return ("Model zip is empty", None, None)
             os.mkdir(os.path.join(run_path, "models", drive_id))
             with zipfile.ZipFile(zip_path, "r") as zip_ref:
