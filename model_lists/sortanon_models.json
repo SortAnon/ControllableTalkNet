@@ -165,6 +165,11 @@
             "name": "Mayor Mare",
             "drive_id": "1UFQWJHzKFPumoxioopPbAzM9ydznnRX3",
             "is_singing": false
+        },
+        {
+            "name": "Trixie (singing)",
+            "drive_id": "1dA26cUn0Kltt3Evps8DfM-uSrs3sFz72",
+            "is_singing": true
         }
     ]}
 ]
