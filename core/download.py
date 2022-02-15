@@ -30,8 +30,9 @@ def download_from_drive(model, custom_model, run_path):
         if not os.path.exists(os.path.join(run_path, "models")):
             os.mkdir(os.path.join(run_path, "models"))
         if not os.path.exists(os.path.join(run_path, "models", drive_id)):
-            os.mkdir(os.path.join(run_path, "models", drive_id))
-            zip_path = os.path.join(run_path, "models", drive_id, "model.zip")
+            zip_path = os.path.join(run_path, "models", "model_temp.zip")
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
             gdown.download(
                 d + drive_id,
                 zip_path,
@@ -44,6 +45,7 @@ def download_from_drive(model, custom_model, run_path):
                 os.remove(zip_path)
                 os.rmdir(os.path.join(run_path, "models", drive_id))
                 return ("Model zip is empty", None, None)
+            os.mkdir(os.path.join(run_path, "models", drive_id))
             with zipfile.ZipFile(zip_path, "r") as zip_ref:
                 zip_ref.extractall(os.path.join(run_path, "models", drive_id))
             os.remove(zip_path)
