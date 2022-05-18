@@ -8,6 +8,7 @@ RUN python3.8 -m pip --no-cache-dir install -r "/talknet/requirements.txt" -f ht
 RUN python3.8 -m pip --no-cache-dir install git+https://github.com/SortAnon/NeMo.git
 RUN python3.8 -m pip uninstall -y pesq
 RUN python3.8 -m pip install pesq==0.0.2
+RUN python3.8 -m pip install werkzeug==2.0.3
 RUN touch /talknet/is_docker
 WORKDIR /talknet
 EXPOSE 8050
