@@ -18,8 +18,8 @@ RUN printf "#!/bin/bash \
     \ngit -C /talknet reset --hard origin/main -q \
     \ngit -C /talknet pull origin main -q \
     \necho Updating HiFi-GAN... \
-    \ngit -C /talknet reset --hard origin/main -q \
-    \ngit -C /talknet pull origin main -q \
+    \ngit -C /talknet/hifi-gan reset --hard origin/master -q \
+    \ngit -C /talknet/hifi-gan pull origin master -q \
     \necho Updating Python dependencies... \
     \npython3.8 -m pip --quiet --no-cache-dir install -r /talknet/requirements.txt -f https://download.pytorch.org/whl/torch_stable.html \
     \npython3.8 -m pip --quiet --no-cache-dir install git+https://github.com/SortAnon/NeMo.git \

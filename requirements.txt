@@ -32,3 +32,6 @@ torchcrepe==0.0.15
 taming-transformers-rom1504==0.0.6
 einops==0.3.2
 tensorflow-hub==0.12.0
+flask==2.0.3
+werkzeug==2.0.3
+jinja2==3.0.1
