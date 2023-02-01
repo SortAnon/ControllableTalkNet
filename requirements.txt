@@ -25,7 +25,7 @@ crepe==0.0.12
 resampy==0.2.2
 ffmpeg-python==0.2.0
 tqdm
-gdown==4.3.1
+gdown==4.6.0
 editdistance==0.5.3
 ipywidgets==7.6.3
 torchcrepe==0.0.15
