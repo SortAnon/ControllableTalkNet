@@ -19,7 +19,7 @@ from denoiser import Denoiser
 
 app = Flask(__name__)
 RUN_PATH = os.path.dirname(os.path.realpath(__file__))
-DEVICE = "cuda:0"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def load_hifigan(model_name, conf_name):

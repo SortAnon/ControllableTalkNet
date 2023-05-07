@@ -24,7 +24,7 @@ from core import extract, vocoder, reconstruct
 from core.download import download_from_drive, download_reconst
 
 app = JupyterDash(__name__)
-DEVICE = "cuda:0"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 CPU_PITCH = False
 RUN_PATH = os.path.dirname(os.path.realpath(__file__))
 if RUN_PATH == "/content":

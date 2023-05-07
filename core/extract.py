@@ -397,6 +397,7 @@ class ExtractPitch:
         audio_numpy = audio.squeeze(0).numpy()
         audio_x = np.arange(0, len(audio_numpy)) / 22050.0
 
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         frequency, confidence = torchcrepe.predict(
             audio,
             sr,
@@ -407,7 +408,7 @@ class ExtractPitch:
             decoder=torchcrepe.decode.viterbi,
             return_periodicity=True,
             batch_size=128,
-            device="cuda:0",
+            device=device,
         )
         confidence = torchcrepe.filter.median(confidence, 3)
 
