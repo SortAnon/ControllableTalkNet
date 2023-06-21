@@ -85,7 +85,7 @@ def get_drive_id_from_character(character):
     character_to_id_map = {option['label']: option['value'].split('|')[0] for option in dropdown_options}
     return character_to_id_map.get(character)
 
-def write_output_file(args):
+def write_output_file(args, output_array, output_samplerate):
     output_path = create_unique_file(args) if args.output is None else args.output
     soundfile.write(output_path, output_array, output_samplerate)
 
@@ -101,5 +101,5 @@ if __name__ == '__main__':
     args.pitch_options = amend_pitch_options_if_needed(args)
     prepare_output_directory()
     output_array, output_samplerate = generate_audio(args)
-    write_output_file(args)
+    write_output_file(args, output_array, output_samplerate)
 
